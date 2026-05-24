@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo } from "react";
-import type { ChatMessage, Citation } from "@/types/chat";
+import type { ChatMessage, Citation, PreCitationInfo } from "@/types/chat";
 import { CitationChip } from "./CitationChip";
 
 interface MessageBubbleProps {
@@ -9,12 +9,28 @@ interface MessageBubbleProps {
   onCitationClick: (citation: Citation) => void;
 }
 
+function buildPreCitation(info: PreCitationInfo): Citation {
+  return {
+    index: info.index,
+    section_id: info.section_id,
+    section_title: info.section_title,
+    absatz: info.absatz,
+    page_number: 0,
+    doc_name: info.doc_name,
+    source_url: "",
+    content: "",
+    doc_type: info.doc_type,
+  };
+}
+
 /**
  * Parse message content and replace [Quelle N] references with CitationChip components.
+ * Uses preCitationMap during streaming (before full citations arrive) for immediate chip rendering.
  */
 function parseContent(
   content: string,
   citations: Citation[],
+  preCitationMap: Record<number, PreCitationInfo> | undefined,
   onCitationClick: (citation: Citation) => void
 ) {
   const citationMap = new Map(citations.map((c) => [c.index, c]));
@@ -24,7 +40,8 @@ function parseContent(
     const match = part.match(/\[Quelle\s+(\d+)\]/);
     if (match) {
       const idx = parseInt(match[1], 10);
-      const citation = citationMap.get(idx);
+      const citation = citationMap.get(idx)
+        ?? (preCitationMap?.[idx] ? buildPreCitation(preCitationMap[idx]) : undefined);
       if (citation) {
         return (
           <CitationChip
@@ -51,13 +68,29 @@ function parseContent(
   });
 }
 
-/** Minimal inline markdown: **bold** and bullet points. */
+/** Minimal inline markdown: headings, **bold**, bullet points, numbered lists. */
 function renderMarkdownLine(line: string) {
+  // Headings: ### Heading, ## Heading, # Heading
+  const headingMatch = line.match(/^(#{1,4})\s+(.*)$/);
+  if (headingMatch) {
+    const level = headingMatch[1].length;
+    const text = headingMatch[2];
+    const className =
+      level === 1
+        ? "text-base font-bold mt-3 mb-1"
+        : level === 2
+          ? "text-[0.94rem] font-bold mt-3 mb-1"
+          : level === 3
+            ? "text-sm font-semibold mt-2 mb-0.5"
+            : "text-sm font-semibold mt-1";
+    return <div className={className}>{renderBold(text)}</div>;
+  }
+
   // Bullet points
   const bulletMatch = line.match(/^(\s*[-*])\s+(.*)$/);
   if (bulletMatch) {
     return (
-      <span className="flex gap-2">
+      <span className="flex gap-2 ml-1">
         <span className="text-gray-400 select-none">&bull;</span>
         <span>{renderBold(bulletMatch[2])}</span>
       </span>
@@ -108,9 +141,10 @@ export function MessageBubble({
         : parseContent(
             message.content,
             message.citations || [],
+            message.preCitationMap,
             onCitationClick
           ),
-    [message.content, message.citations, isUser, onCitationClick]
+    [message.content, message.citations, message.preCitationMap, isUser, onCitationClick]
   );
 
   return (

@@ -128,13 +128,25 @@ def create_or_update_index() -> None:
                 type=SearchFieldDataType.Int32,
                 sortable=True,
             ),
+            SimpleField(
+                name="doc_type",
+                type=SearchFieldDataType.String,
+                filterable=True,
+                facetable=True,
+            ),
+            SearchableField(
+                name="program_name",
+                type=SearchFieldDataType.String,
+                filterable=True,
+                facetable=True,
+            ),
         ],
         vector_search=VectorSearch(
             algorithms=[
                 HnswAlgorithmConfiguration(
                     name="default-hnsw",
                     parameters={
-                        "m": 4,
+                        "m": 16,
                         "efConstruction": 400,
                         "efSearch": 500,
                         "metric": "cosine",
@@ -154,7 +166,7 @@ def create_or_update_index() -> None:
                     name="default",
                     prioritized_fields=SemanticPrioritizedFields(
                         content_fields=[SemanticField(field_name="content")],
-                        title_fields=[SemanticField(field_name="section_title")],
+                        title_field=SemanticField(field_name="section_title"),
                         keywords_fields=[SemanticField(field_name="section_id")],
                     ),
                 ),
@@ -228,6 +240,8 @@ def upload_chunks(chunks: list[Chunk], embeddings: list[list[float]]) -> int:
             "part": chunk.part,
             "sub_part": chunk.sub_part,
             "chunk_index": chunk.chunk_index,
+            "doc_type": chunk.doc_type,
+            "program_name": chunk.program_name,
         })
 
     # Upload in batches of 100 (Azure limit is 1000, but smaller is safer)
@@ -254,6 +268,24 @@ def ingest_chunks(chunks: list[Chunk]) -> int:
     create_or_update_index()
     embeddings = embed_chunks(chunks)
     return upload_chunks(chunks, embeddings)
+
+
+def delete_document_chunks(doc_filename: str) -> int:
+    """Delete all chunks for a given document filename. Returns count deleted."""
+    client = _get_search_client()
+    results = client.search(
+        search_text="*",
+        filter=f"doc_filename eq '{doc_filename}'",
+        select=["id"],
+        top=1000,
+    )
+    ids = [{"id": r["id"]} for r in results]
+    if not ids:
+        return 0
+    result = client.delete_documents(documents=ids)
+    deleted = sum(1 for r in result if r.succeeded)
+    logger.info("Deleted %d chunks for %s", deleted, doc_filename)
+    return deleted
 
 
 def get_indexed_documents() -> set[str]:
@@ -359,6 +391,8 @@ def embed_and_upload_incremental(
                 "part": chunk.part,
                 "sub_part": chunk.sub_part,
                 "chunk_index": chunk.chunk_index,
+                "doc_type": chunk.doc_type,
+                "program_name": chunk.program_name,
             })
 
         result = search_client.upload_documents(documents=documents)

@@ -1,0 +1,280 @@
+{
+  "version": "1.0",
+  "description": "Ground-truth test cases for campusLMU chatbot evaluation",
+  "cases": [
+    {
+      "id": "fact_01",
+      "category": "factual",
+      "query": "Wie viele ECTS hat die Masterarbeit in Informatik?",
+      "expected_section_ids": ["§14"],
+      "expected_keywords": ["25", "ECTS", "Masterarbeit"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "fact_02",
+      "category": "factual",
+      "query": "Wie lang ist die Regelstudienzeit im Master Informatik?",
+      "expected_section_ids": ["§5"],
+      "expected_keywords": ["Semester", "Regelstudienzeit"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "fact_03",
+      "category": "factual",
+      "query": "Welche Prüfungsformen gibt es im Master Informatik?",
+      "expected_section_ids": ["§14", "§18"],
+      "expected_keywords": ["Klausur", "mündlich", "Prüfung"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "fact_04",
+      "category": "factual",
+      "query": "Wie viele ECTS brauche ich insgesamt für den Master Informatik?",
+      "expected_section_ids": ["§5", "§6"],
+      "expected_keywords": ["120", "ECTS"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "fact_05",
+      "category": "factual",
+      "query": "Wann muss ich mich zur Masterarbeit anmelden?",
+      "expected_section_ids": ["§14"],
+      "expected_keywords": ["Anmeldung", "Masterarbeit"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "fact_06",
+      "category": "factual",
+      "query": "Gibt es eine Anwesenheitspflicht?",
+      "expected_section_ids": [],
+      "expected_keywords": ["Anwesenheit"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "fact_07",
+      "category": "factual",
+      "query": "Wie oft darf ich eine Prüfung wiederholen?",
+      "expected_section_ids": ["§11", "§12", "§20"],
+      "expected_keywords": ["Wiederholung", "wiederholen"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "fact_08",
+      "category": "factual",
+      "query": "Welche Module sind Pflicht im Master Informatik?",
+      "expected_section_ids": ["§6", "§7"],
+      "expected_keywords": ["Pflicht", "Modul"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "fact_09",
+      "category": "factual",
+      "query": "Wie wird die Masternote berechnet?",
+      "expected_section_ids": ["§21", "§34"],
+      "expected_keywords": ["Note", "Berechnung", "Gewichtung"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "fact_10",
+      "category": "factual",
+      "query": "Wer ist Prüfungsausschussvorsitzender?",
+      "expected_section_ids": ["§23"],
+      "expected_keywords": ["Prüfungsausschuss"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "comp_01",
+      "category": "comparison",
+      "query": "Was ist der Unterschied zwischen Pflicht- und Wahlpflichtmodulen?",
+      "expected_section_ids": ["§6", "§7"],
+      "expected_keywords": ["Pflicht", "Wahlpflicht", "Modul"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "comp_02",
+      "category": "comparison",
+      "query": "Was ist der Unterschied zwischen PSTO und Eignungssatzung?",
+      "expected_section_ids": [],
+      "expected_keywords": ["PSTO", "Eignungssatzung", "Prüfungsordnung"],
+      "expected_doc_types": ["psto", "eignung"],
+      "language": "de"
+    },
+    {
+      "id": "comp_03",
+      "category": "comparison",
+      "query": "Welche Unterschiede gibt es zwischen mündlicher und schriftlicher Prüfung?",
+      "expected_section_ids": ["§14", "§18"],
+      "expected_keywords": ["mündlich", "schriftlich", "Klausur"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "comp_04",
+      "category": "comparison",
+      "query": "Gelten für Bachelor und Master dieselben Wiederholungsregeln?",
+      "expected_section_ids": ["§11", "§12", "§20"],
+      "expected_keywords": ["Wiederholung", "Bachelor", "Master"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "comp_05",
+      "category": "comparison",
+      "query": "Was unterscheidet die PSTO 2017 von der PSTO 2024 in Informatik?",
+      "expected_section_ids": [],
+      "expected_keywords": ["2017", "2024", "Änderung"],
+      "expected_doc_types": ["psto", "aenderung"],
+      "language": "de"
+    },
+    {
+      "id": "proc_01",
+      "category": "process",
+      "query": "Wie melde ich mich zur Masterarbeit an?",
+      "expected_section_ids": ["§14"],
+      "expected_keywords": ["Anmeldung", "Masterarbeit"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "proc_02",
+      "category": "process",
+      "query": "Was muss ich tun wenn ich eine Prüfung nicht bestanden habe?",
+      "expected_section_ids": ["§11", "§12", "§20"],
+      "expected_keywords": ["nicht bestanden", "Wiederholung"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "proc_03",
+      "category": "process",
+      "query": "Wie kann ich meine Masterarbeit verlängern?",
+      "expected_section_ids": ["§14"],
+      "expected_keywords": ["Verlängerung", "Frist", "Masterarbeit"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "proc_04",
+      "category": "process",
+      "query": "Wie läuft die Anrechnung von externen Leistungen?",
+      "expected_section_ids": ["§27"],
+      "expected_keywords": ["Anrechnung", "Anerkennung"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "proc_05",
+      "category": "process",
+      "query": "Was passiert wenn ich die Regelstudienzeit überschreite?",
+      "expected_section_ids": ["§5"],
+      "expected_keywords": ["Regelstudienzeit", "überschreiten"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "amend_01",
+      "category": "amendment",
+      "query": "Welche Paragraphen der PSTO Informatik wurden zuletzt geändert?",
+      "expected_section_ids": [],
+      "expected_keywords": ["Änderung", "geändert"],
+      "expected_doc_types": ["aenderung"],
+      "language": "de"
+    },
+    {
+      "id": "amend_02",
+      "category": "amendment",
+      "query": "Wurde § 14 der PSTO Informatik geändert?",
+      "expected_section_ids": ["§14"],
+      "expected_keywords": ["§14"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "amend_03",
+      "category": "amendment",
+      "query": "Wann trat die letzte Änderungssatzung in Kraft?",
+      "expected_section_ids": [],
+      "expected_keywords": ["Inkrafttreten", "Änderungssatzung"],
+      "expected_doc_types": ["aenderung"],
+      "language": "de"
+    },
+    {
+      "id": "amend_04",
+      "category": "amendment",
+      "query": "Gilt die Änderung auch für Studierende die vor 2024 angefangen haben?",
+      "expected_section_ids": [],
+      "expected_keywords": ["Übergangsregelung", "Änderung"],
+      "expected_doc_types": ["aenderung"],
+      "language": "de"
+    },
+    {
+      "id": "amend_05",
+      "category": "amendment",
+      "query": "Was hat sich 2024 an der Eignungssatzung BWL geändert?",
+      "expected_section_ids": [],
+      "expected_keywords": ["Änderung", "2024", "Eignungssatzung"],
+      "expected_doc_types": ["aenderung", "eignung"],
+      "language": "de"
+    },
+    {
+      "id": "edge_01",
+      "category": "edge_case",
+      "query": "What are the admission requirements for the Master in Computer Science?",
+      "expected_section_ids": [],
+      "expected_keywords": ["admission", "requirements", "Zulassung", "Eignung"],
+      "expected_doc_types": ["eignung", "zulassung"],
+      "language": "en"
+    },
+    {
+      "id": "edge_02",
+      "category": "edge_case",
+      "query": "Wie sind die Prüfungsregeln?",
+      "expected_section_ids": [],
+      "expected_keywords": ["Prüfung"],
+      "expected_doc_types": ["psto"],
+      "language": "de",
+      "note": "Kein Studiengang genannt — Bot soll nachfragen"
+    },
+    {
+      "id": "edge_03",
+      "category": "edge_case",
+      "query": "Was gibt es heute in der Mensa?",
+      "expected_section_ids": [],
+      "expected_keywords": [],
+      "expected_doc_types": [],
+      "language": "de",
+      "note": "Off-topic — Bot soll höflich ablehnen"
+    },
+    {
+      "id": "edge_04",
+      "category": "edge_case",
+      "query": "Kann ich meine Abschlussarbeit verlängern?",
+      "expected_section_ids": ["§14"],
+      "expected_keywords": ["Verlängerung", "Frist"],
+      "expected_doc_types": ["psto"],
+      "language": "de",
+      "note": "Vocabulary mismatch: 'Abschlussarbeit' statt 'Masterarbeit', 'verlängern' statt 'Fristverlängerung'"
+    },
+    {
+      "id": "edge_05",
+      "category": "edge_case",
+      "query": "Welche Master-Studiengänge bietet die LMU an?",
+      "expected_section_ids": [],
+      "expected_keywords": ["Studiengang", "Master"],
+      "expected_doc_types": [],
+      "language": "de",
+      "note": "Overview-Frage — aktuell schwer zu beantworten ohne Doc-Summaries"
+    }
+  ]
+}

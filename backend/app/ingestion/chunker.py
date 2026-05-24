@@ -10,9 +10,9 @@ _enc = tiktoken.get_encoding("cl100k_base")
 
 # --- Regex patterns for PyMuPDF4LLM markdown output ---
 # Matches section headings like: ## **§ 1 Gegenstand des Studiengangs und Zweck der Masterprüfung**
-# Also handles: ## **§ 13 (nicht belegt)**
+# Also handles: ## **§ 13 (nicht belegt)** and ## **§ 1** (title-less, common in Änderungssatzungen)
 SECTION_HEADING_PATTERN = re.compile(
-    r"^##\s+\*\*§\s*(\d+)\s+(.+?)\*\*\s*$", re.MULTILINE
+    r"^##\s+\*\*§\s*(\d+)\s*(.*?)\*\*\s*$", re.MULTILINE
 )
 # Matches Absatz markers: "(1)", "(2)" at the start of a line
 ABSATZ_PATTERN = re.compile(r"^\((\d+)\)", re.MULTILINE)
@@ -22,6 +22,13 @@ PART_PATTERN = re.compile(
 )
 # Table of contents indicator
 TOC_PATTERN = re.compile(r"Inhaltsübersicht", re.IGNORECASE)
+AENDERUNG_TITLE_PATTERN = re.compile(
+    r"(?:Satzung\s+zur\s+)?Änderung\s+der\s+(Prüfungs-?\s*(?:und\s+)?Studienordnung|Eignungssatzung|Zulassungsordnung).+?(?:für\s+den\s+\w+studiengang\s+)?(.+?)\s*\((\d{4})\)",
+    re.IGNORECASE | re.DOTALL,
+)
+AENDERUNG_MODIFIED_SECTIONS_PATTERN = re.compile(
+    r"§\s*(\d+)\s+(?:erhält|wird|entfällt|lautet)", re.IGNORECASE,
+)
 
 MAX_CHUNK_TOKENS = 800
 TARGET_CHUNK_TOKENS = 600
@@ -40,6 +47,8 @@ class Chunk:
     sub_part: str  # e.g. ""
     source_url: str = ""
     chunk_index: int = 0
+    doc_type: str = ""  # psto | eignung | zulassung | aenderung
+    program_name: str = ""  # e.g. "Informatik"
 
     @property
     def id(self) -> str:
@@ -181,8 +190,15 @@ def _split_into_sections(full_text: str, boundaries: list[tuple[int, int]]) -> l
     return sections
 
 
+def _last_sentences(text: str, n: int = 2) -> str:
+    """Extract the last n sentences from text for overlap context."""
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    picked = sentences[-n:] if len(sentences) > n else []
+    return " ".join(picked)
+
+
 def _split_section_by_absatz(section: _SectionBlock) -> list[tuple[str, str | None]]:
-    """Split a section's body into Absatz groups.
+    """Split a section's body into Absatz groups with overlap context.
 
     Returns list of (text, absatz_label) tuples.
     """
@@ -196,12 +212,16 @@ def _split_section_by_absatz(section: _SectionBlock) -> list[tuple[str, str | No
         return [(body, None)]
 
     groups: list[tuple[str, str | None]] = []
+    prev_group_text = ""
 
-    # Text before the first Absatz (the heading part)
     preamble = body[:absatz_positions[0][0]].strip()
+    preamble_has_content = bool(preamble) and count_tokens(preamble) > count_tokens(section.heading) + 5
 
-    # Group Absätze into chunks that stay within token limits
-    current_texts: list[str] = [preamble] if preamble else []
+    if preamble_has_content:
+        groups.append((preamble, "Einleitung"))
+        prev_group_text = preamble
+
+    current_texts: list[str] = [preamble] if (preamble and not preamble_has_content) else []
     current_absatz_start: int | None = None
     current_absatz_end: int | None = None
 
@@ -217,9 +237,16 @@ def _split_section_by_absatz(section: _SectionBlock) -> list[tuple[str, str | No
         if count_tokens(tentative) > TARGET_CHUNK_TOKENS and current_texts:
             # Emit current group
             label = _absatz_label(current_absatz_start, current_absatz_end)
-            groups.append(("\n\n".join(current_texts), label))
-            # Start new group with the section heading prepended for context
-            current_texts = [section.heading, absatz_text]
+            group_text = "\n\n".join(current_texts)
+            groups.append((group_text, label))
+            # Start new group with heading + overlap from previous group
+            overlap = _last_sentences(group_text)
+            new_start: list[str] = [section.heading]
+            if overlap:
+                new_start.append(f"[...] {overlap}")
+            new_start.append(absatz_text)
+            current_texts = new_start
+            prev_group_text = group_text
             current_absatz_start = absatz_num
             current_absatz_end = absatz_num
         else:
@@ -242,25 +269,78 @@ def _absatz_label(start: int | None, end: int | None) -> str | None:
     return f"Abs. {start}-{end}"
 
 
+def _extract_aenderung_context(pages: list[ParsedPage]) -> str:
+    """For Änderungssatzungen, extract which original document and sections are modified."""
+    first_pages_text = " ".join(p.text for p in pages[:3])
+
+    title_match = AENDERUNG_TITLE_PATTERN.search(first_pages_text)
+    if not title_match:
+        return ""
+
+    original_doc_type = title_match.group(1).strip()
+    original_year = title_match.group(3)
+
+    modified_sections = sorted(set(
+        f"§{m.group(1)}" for m in AENDERUNG_MODIFIED_SECTIONS_PATTERN.finditer(first_pages_text)
+    ))
+
+    parts = [f"[Änderungssatzung: Ändert die {original_doc_type} (Fassung {original_year})."]
+    if modified_sections:
+        parts.append(f"Geänderte Paragraphen: {', '.join(modified_sections)}.")
+    parts.append("Die nicht genannten Paragraphen der Ursprungsordnung gelten unverändert weiter.]")
+    return " ".join(parts)
+
+
+def _hard_split(text: str, max_tokens: int) -> list[str]:
+    """Split text into chunks of at most max_tokens, splitting on paragraph boundaries."""
+    if count_tokens(text) <= max_tokens:
+        return [text]
+    paragraphs = text.split("\n\n")
+    chunks: list[str] = []
+    current: list[str] = []
+    current_tokens = 0
+    for para in paragraphs:
+        para_tokens = count_tokens(para)
+        if current and current_tokens + para_tokens > max_tokens:
+            chunks.append("\n\n".join(current))
+            current = [para]
+            current_tokens = para_tokens
+        else:
+            current.append(para)
+            current_tokens += para_tokens
+    if current:
+        chunks.append("\n\n".join(current))
+    return chunks if chunks else [text]
+
+
 def chunk_document(
     pages: list[ParsedPage],
     doc_filename: str,
     source_url: str = "",
+    doc_type: str = "",
+    program_name: str = "",
 ) -> list[Chunk]:
     """Chunk a parsed document into section-aware chunks with metadata."""
     doc_name = _extract_doc_name(pages)
     full_text, boundaries = _build_full_text(pages)
     sections = _split_into_sections(full_text, boundaries)
 
+    aenderung_prefix = ""
+    if doc_type == "aenderung":
+        aenderung_prefix = _extract_aenderung_context(pages)
+
     chunks: list[Chunk] = []
     chunk_idx = 0
 
     for section in sections:
-        tokens = count_tokens(section.body)
+        body = section.body
+        if aenderung_prefix:
+            body = aenderung_prefix + "\n\n" + body
+        tokens = count_tokens(body)
 
         if tokens <= MAX_CHUNK_TOKENS:
             chunks.append(Chunk(
-                content=section.body,
+                content=body,
                 doc_name=doc_name,
                 doc_filename=doc_filename,
                 section_id=section.section_id,
@@ -271,26 +351,33 @@ def chunk_document(
                 sub_part="",
                 source_url=source_url,
                 chunk_index=chunk_idx,
+                doc_type=doc_type,
+                program_name=program_name,
             ))
             chunk_idx += 1
         else:
             # Split by Absatz groups
             groups = _split_section_by_absatz(section)
             for text, absatz_label in groups:
-                chunks.append(Chunk(
-                    content=text,
-                    doc_name=doc_name,
-                    doc_filename=doc_filename,
-                    section_id=section.section_id,
-                    section_title=section.section_title,
-                    absatz=absatz_label,
-                    page_number=section.page_number,
-                    part=section.part,
-                    sub_part="",
-                    source_url=source_url,
-                    chunk_index=chunk_idx,
-                ))
-                chunk_idx += 1
+                chunk_content = (aenderung_prefix + "\n\n" + text) if aenderung_prefix else text
+                sub_chunks = _hard_split(chunk_content, MAX_CHUNK_TOKENS)
+                for sc in sub_chunks:
+                    chunks.append(Chunk(
+                        content=sc,
+                        doc_name=doc_name,
+                        doc_filename=doc_filename,
+                        section_id=section.section_id,
+                        section_title=section.section_title,
+                        absatz=absatz_label,
+                        page_number=section.page_number,
+                        part=section.part,
+                        sub_part="",
+                        source_url=source_url,
+                        chunk_index=chunk_idx,
+                        doc_type=doc_type,
+                        program_name=program_name,
+                    ))
+                    chunk_idx += 1
 
     return chunks
 
@@ -298,11 +385,34 @@ def chunk_document(
 def chunk_all_documents(
     parsed_docs: dict[str, list[ParsedPage]],
     url_map: dict[str, str] | None = None,
+    doc_type_map: dict[str, str] | None = None,
+    program_map: dict[str, str] | None = None,
+    generate_summaries: bool = False,
 ) -> list[Chunk]:
     """Chunk all parsed documents."""
     all_chunks: list[Chunk] = []
     for filename, pages in parsed_docs.items():
         source_url = (url_map or {}).get(filename, "")
-        doc_chunks = chunk_document(pages, filename, source_url=source_url)
+        doc_type = (doc_type_map or {}).get(filename, "")
+        program_name = (program_map or {}).get(filename, "")
+        doc_chunks = chunk_document(
+            pages, filename,
+            source_url=source_url,
+            doc_type=doc_type,
+            program_name=program_name,
+        )
+        if generate_summaries and doc_chunks:
+            from app.ingestion.summarizer import generate_summary_chunk
+            summary = generate_summary_chunk(
+                pages,
+                doc_filename=filename,
+                doc_name=doc_chunks[0].doc_name,
+                source_url=source_url,
+                doc_type=doc_type,
+                program_name=program_name,
+                chunk_index=len(doc_chunks),
+            )
+            if summary:
+                doc_chunks.append(summary)
         all_chunks.extend(doc_chunks)
     return all_chunks

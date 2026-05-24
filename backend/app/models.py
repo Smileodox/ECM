@@ -9,6 +9,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: list[ChatMessage] = []
+    program_name: str | None = None
 
 
 class Citation(BaseModel):
@@ -18,8 +19,12 @@ class Citation(BaseModel):
     absatz: str | None = None
     page_number: int
     doc_name: str
+    doc_filename: str = ""
+    program_name: str = ""
     source_url: str = ""
     content: str
+    doc_type: str = ""
+    reranker_score: float = 0.0
 
 
 class IngestResponse(BaseModel):

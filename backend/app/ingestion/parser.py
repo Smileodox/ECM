@@ -20,8 +20,11 @@ def parse_pdf(pdf_path: str | Path) -> list[ParsedPage]:
         page_num = page_data["metadata"]["page_number"]  # already 1-based
         text = page_data["text"]
 
-        # Strip running headers/footers like "- 12 -"
+        # Strip running headers/footers
         text = re.sub(r"^-\s*\d+\s*-\s*$", "", text, flags=re.MULTILINE)
+        text = re.sub(r"^Seite\s+\d+\s+von\s+\d+\s*$", "", text, flags=re.MULTILINE)
+        text = re.sub(r"^\d+\s*/\s*\d+\s*$", "", text, flags=re.MULTILINE)
+        text = re.sub(r"^Stand:\s*\d{2}\.\d{2}\.\d{4}\s*$", "", text, flags=re.MULTILINE)
 
         # Strip excessive blank lines
         text = re.sub(r"\n{3,}", "\n\n", text)

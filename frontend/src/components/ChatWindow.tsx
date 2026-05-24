@@ -3,18 +3,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Citation } from "@/types/chat";
 import { useChat } from "@/hooks/useChat";
+import { fetchPrograms } from "@/lib/api";
 import { MessageBubble } from "./MessageBubble";
 import { ChatInput } from "./ChatInput";
 import { CitationDrawer } from "./CitationDrawer";
 import { TypingIndicator } from "./TypingIndicator";
 
 export function ChatWindow() {
-  const { messages, isStreaming, error, sendMessage, clearMessages } =
+  const { messages, isStreaming, error, programName, setProgramName, sendMessage, clearMessages, retryLast } =
     useChat();
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(
     null
   );
+  const [programs, setPrograms] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetchPrograms().then(setPrograms);
+  }, []);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -42,14 +48,28 @@ export function ChatWindow() {
             </p>
           </div>
         </div>
-        {messages.length > 0 && (
-          <button
-            onClick={clearMessages}
-            className="rounded-lg px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-          >
-            Neues Gespraech
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {programs.length > 0 && (
+            <select
+              value={programName || ""}
+              onChange={(e) => setProgramName(e.target.value || null)}
+              className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-600 focus:border-green-500 focus:outline-none max-w-[200px]"
+            >
+              <option value="">Alle Studiengaenge</option>
+              {programs.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          )}
+          {messages.length > 0 && (
+            <button
+              onClick={clearMessages}
+              className="rounded-lg px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+            >
+              Neues Gespraech
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Messages */}
@@ -110,8 +130,14 @@ export function ChatWindow() {
             !messages[messages.length - 1]?.content && <TypingIndicator />}
 
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between gap-3">
+              <span>{error}</span>
+              <button
+                onClick={retryLast}
+                className="shrink-0 rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-200 transition-colors"
+              >
+                Erneut versuchen
+              </button>
             </div>
           )}
 

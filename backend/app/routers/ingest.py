@@ -27,17 +27,48 @@ async def ingest_documents():
 
     logger.info("Starting ingestion of %d PDF files...", len(pdf_files))
 
-    # Parse
+    # Parse (only current versions)
+    from app.search.version_registry import get_registry, invalidate_registry
+    invalidate_registry()
+    registry = get_registry()
+    blocked = registry.get_blocked_filenames()
+
     parsed_docs = parse_all_pdfs(docs_dir)
+    if blocked:
+        before = len(parsed_docs)
+        parsed_docs = {fn: pages for fn, pages in parsed_docs.items() if fn not in blocked}
+        logger.info("Version filter: %d → %d documents (skipped %d superseded)", before, len(parsed_docs), before - len(parsed_docs))
     docs_count = len(parsed_docs)
     logger.info("Parsed %d documents.", docs_count)
 
-    # Chunk
-    url_map = {
-        filename: f"{settings.lmu_cdn_base_url}/{filename}"
-        for filename in parsed_docs
-    }
-    chunks = chunk_all_documents(parsed_docs, url_map=url_map)
+    # Build metadata maps from manifest if available
+    import json
+    manifest_path = docs_dir / "manifest.json"
+    url_map: dict[str, str] = {}
+    doc_type_map: dict[str, str] = {}
+    program_map: dict[str, str] = {}
+
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text())
+        for entry in manifest["entries"]:
+            fn = entry["filename"]
+            url_map[fn] = entry["source_url"]
+            doc_type_map[fn] = entry.get("doc_type", "")
+            programs = entry.get("programs", [])
+            program_map[fn] = programs[0] if programs else ""
+    else:
+        url_map = {
+            filename: f"{settings.lmu_cdn_base_url}/{filename}"
+            for filename in parsed_docs
+        }
+
+    chunks = chunk_all_documents(
+        parsed_docs,
+        url_map=url_map,
+        doc_type_map=doc_type_map,
+        program_map=program_map,
+        generate_summaries=True,
+    )
     chunks_count = len(chunks)
     logger.info("Created %d chunks.", chunks_count)
 
