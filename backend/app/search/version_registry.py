@@ -84,7 +84,8 @@ class VersionRegistry:
                 elif year == newest_year:
                     allowed.add(filename)
                 elif year is None:
-                    blocked.add(filename)
+                    logger.warning("Could not extract year from %s — allowing but manual review recommended", filename)
+                    allowed.add(filename)
                 else:
                     blocked.add(filename)
 

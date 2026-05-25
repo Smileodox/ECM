@@ -1,7 +1,11 @@
+import asyncio
+import json
 import logging
+import os
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Security
+from fastapi.security import APIKeyHeader
 
 from app.config import settings
 from app.ingestion.chunker import chunk_all_documents
@@ -9,25 +13,26 @@ from app.ingestion.indexer import ingest_chunks
 from app.ingestion.parser import parse_all_pdfs
 from app.models import IngestResponse
 
-logger = logging.getLogger(__name__)
+_API_KEY_HEADER = APIKeyHeader(name="X-Ingest-Key", auto_error=False)
+_INGEST_KEY = os.environ.get("INGEST_API_KEY", "")
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/ingest", response_model=IngestResponse)
-async def ingest_documents():
-    """Parse, chunk, and index all PDF documents."""
-    docs_dir = Path(settings.documents_dir)
-    if not docs_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Documents directory not found: {docs_dir}")
+async def _verify_ingest_key(key: str | None = Security(_API_KEY_HEADER)):
+    if not _INGEST_KEY:
+        raise HTTPException(status_code=503, detail="Ingestion not configured (INGEST_API_KEY not set)")
+    if key != _INGEST_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing X-Ingest-Key header")
 
+
+def _run_ingest(docs_dir: Path) -> IngestResponse:
+    """Blocking ingestion pipeline — runs in a thread pool to avoid blocking the event loop."""
     pdf_files = list(docs_dir.glob("*.pdf"))
     if not pdf_files:
-        raise HTTPException(status_code=404, detail="No PDF files found in documents directory")
+        raise ValueError("No PDF files found in documents directory")
 
-    logger.info("Starting ingestion of %d PDF files...", len(pdf_files))
-
-    # Parse (only current versions)
     from app.search.version_registry import get_registry, invalidate_registry
     invalidate_registry()
     registry = get_registry()
@@ -41,8 +46,6 @@ async def ingest_documents():
     docs_count = len(parsed_docs)
     logger.info("Parsed %d documents.", docs_count)
 
-    # Build metadata maps from manifest if available
-    import json
     manifest_path = docs_dir / "manifest.json"
     url_map: dict[str, str] = {}
     doc_type_map: dict[str, str] = {}
@@ -57,10 +60,7 @@ async def ingest_documents():
             programs = entry.get("programs", [])
             program_map[fn] = programs[0] if programs else ""
     else:
-        url_map = {
-            filename: f"{settings.lmu_cdn_base_url}/{filename}"
-            for filename in parsed_docs
-        }
+        url_map = {fn: f"{settings.lmu_cdn_base_url}/{fn}" for fn in parsed_docs}
 
     chunks = chunk_all_documents(
         parsed_docs,
@@ -72,7 +72,6 @@ async def ingest_documents():
     chunks_count = len(chunks)
     logger.info("Created %d chunks.", chunks_count)
 
-    # Index
     indexed_count = ingest_chunks(chunks)
     logger.info("Indexed %d chunks.", indexed_count)
 
@@ -81,3 +80,24 @@ async def ingest_documents():
         chunks_created=chunks_count,
         chunks_indexed=indexed_count,
     )
+
+
+@router.post("/ingest", response_model=IngestResponse, dependencies=[Depends(_verify_ingest_key)])
+async def ingest_documents():
+    """Parse, chunk, and index all PDF documents. Runs in a thread pool to avoid blocking."""
+    docs_dir = Path(settings.documents_dir)
+    if not docs_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Documents directory not found: {docs_dir}")
+    if not list(docs_dir.glob("*.pdf")):
+        raise HTTPException(status_code=404, detail="No PDF files found in documents directory")
+
+    logger.info("Starting ingestion (offloaded to thread pool)...")
+    try:
+        result = await asyncio.to_thread(_run_ingest, docs_dir)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    from app.chat.engine import invalidate_program_cache
+    invalidate_program_cache()
+
+    return result

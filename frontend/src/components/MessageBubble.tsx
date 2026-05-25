@@ -7,6 +7,7 @@ import { CitationChip } from "./CitationChip";
 interface MessageBubbleProps {
   message: ChatMessage;
   onCitationClick: (citation: Citation) => void;
+  isStreaming?: boolean;
 }
 
 function buildPreCitation(info: PreCitationInfo): Citation {
@@ -23,10 +24,6 @@ function buildPreCitation(info: PreCitationInfo): Citation {
   };
 }
 
-/**
- * Parse message content and replace [Quelle N] references with CitationChip components.
- * Uses preCitationMap during streaming (before full citations arrive) for immediate chip rendering.
- */
 function parseContent(
   content: string,
   citations: Citation[],
@@ -34,12 +31,12 @@ function parseContent(
   onCitationClick: (citation: Citation) => void
 ) {
   const citationMap = new Map(citations.map((c) => [c.index, c]));
-  const parts = content.split(/(\[Quelle\s+\d+\])/g);
+  const parts = content.split(/(<<cite:\d+>>|\[Quelle\s+\d+\])/g);
 
   return parts.map((part, i) => {
-    const match = part.match(/\[Quelle\s+(\d+)\]/);
+    const match = part.match(/(?:<<cite:(\d+)>>|\[Quelle\s+(\d+)\])/);
     if (match) {
-      const idx = parseInt(match[1], 10);
+      const idx = parseInt(match[1] || match[2], 10);
       const citation = citationMap.get(idx)
         ?? (preCitationMap?.[idx] ? buildPreCitation(preCitationMap[idx]) : undefined);
       if (citation) {
@@ -53,7 +50,6 @@ function parseContent(
       }
     }
 
-    // Render text with basic line break support
     const lines = part.split("\n");
     return (
       <Fragment key={i}>
@@ -68,41 +64,37 @@ function parseContent(
   });
 }
 
-/** Minimal inline markdown: headings, **bold**, bullet points, numbered lists. */
 function renderMarkdownLine(line: string) {
-  // Headings: ### Heading, ## Heading, # Heading
   const headingMatch = line.match(/^(#{1,4})\s+(.*)$/);
   if (headingMatch) {
     const level = headingMatch[1].length;
     const text = headingMatch[2];
     const className =
       level === 1
-        ? "text-base font-bold mt-3 mb-1"
+        ? "text-base font-semibold mt-4 mb-1.5 text-gray-900"
         : level === 2
-          ? "text-[0.94rem] font-bold mt-3 mb-1"
+          ? "text-[0.94rem] font-semibold mt-4 mb-1.5 text-gray-900"
           : level === 3
-            ? "text-sm font-semibold mt-2 mb-0.5"
-            : "text-sm font-semibold mt-1";
+            ? "text-sm font-semibold mt-3 mb-1 text-gray-800"
+            : "text-sm font-medium mt-2 text-gray-800";
     return <div className={className}>{renderBold(text)}</div>;
   }
 
-  // Bullet points
   const bulletMatch = line.match(/^(\s*[-*])\s+(.*)$/);
   if (bulletMatch) {
     return (
-      <span className="flex gap-2 ml-1">
-        <span className="text-gray-400 select-none">&bull;</span>
+      <span className="flex gap-2.5 ml-1 py-0.5">
+        <span className="text-lmu-green select-none">•</span>
         <span>{renderBold(bulletMatch[2])}</span>
       </span>
     );
   }
 
-  // Numbered lists
   const numberedMatch = line.match(/^(\s*\d+)\.\s+(.*)$/);
   if (numberedMatch) {
     return (
-      <span className="flex gap-2">
-        <span className="text-gray-500 select-none min-w-[1.5em] text-right">
+      <span className="flex gap-2.5 py-0.5">
+        <span className="text-gray-400 select-none min-w-[1.5em] text-right tabular-nums">
           {numberedMatch[1]}.
         </span>
         <span>{renderBold(numberedMatch[2])}</span>
@@ -113,13 +105,12 @@ function renderMarkdownLine(line: string) {
   return renderBold(line);
 }
 
-/** Render **bold** text. */
 function renderBold(text: string) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return (
-        <strong key={i} className="font-semibold">
+        <strong key={i} className="font-semibold text-gray-900">
           {part.slice(2, -2)}
         </strong>
       );
@@ -131,6 +122,7 @@ function renderBold(text: string) {
 export function MessageBubble({
   message,
   onCitationClick,
+  isStreaming,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
 
@@ -147,17 +139,21 @@ export function MessageBubble({
     [message.content, message.citations, message.preCitationMap, isUser, onCitationClick]
   );
 
-  return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-          isUser
-            ? "bg-blue-600 text-white rounded-br-md"
-            : "bg-gray-100 text-gray-800 rounded-bl-md"
-        }`}
-      >
-        {rendered}
+  if (isUser) {
+    return (
+      <div className="flex justify-end animate-user-message-in">
+        <div className="rounded-2xl rounded-br-md bg-gradient-to-br from-lmu-green to-lmu-green-dark px-4 py-2.5 text-sm text-white max-w-[75%] shadow-md">
+          {rendered}
+        </div>
       </div>
+    );
+  }
+
+  if (!message.content) return null;
+
+  return (
+    <div className={`text-[0.9rem] leading-[1.7] text-gray-700${isStreaming ? " streaming-cursor" : ""}`}>
+      {rendered}
     </div>
   );
 }

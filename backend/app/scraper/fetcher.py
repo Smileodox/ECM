@@ -13,8 +13,12 @@ from .manifest import PdfEntry
 
 log = logging.getLogger(__name__)
 
+import os
+
 SEARCH_URL = "https://cms-search.lmu.de/search/courses_by_name_asc/execute"
-SEARCH_AUTH = ("haupia_search_proxy@lmu.de", "haupia_search_proxy")
+_search_user = os.environ.get("LMU_SEARCH_USER", "")
+_search_pass = os.environ.get("LMU_SEARCH_PASS", "")
+SEARCH_AUTH = (_search_user, _search_pass) if _search_user else None
 
 AMTLICHE_CDN = "cms-cdn.lmu.de/media/contenthub/amtliche-veroeffentlichungen/"
 PDF_HREF_RE = re.compile(r'href="([^"]*\.pdf)"', re.IGNORECASE)

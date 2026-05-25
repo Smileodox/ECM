@@ -215,7 +215,7 @@ def embed_chunks(chunks: list[Chunk]) -> list[list[float]]:
         )
 
         if i + EMBEDDING_BATCH_SIZE < len(chunks):
-            time.sleep(30)
+            time.sleep(2)
 
     return all_embeddings
 

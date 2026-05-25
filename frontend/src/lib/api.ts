@@ -25,12 +25,3 @@ export async function fetchPrograms(): Promise<string[]> {
   return data.programs || [];
 }
 
-export async function triggerIngest(): Promise<{
-  documents_processed: number;
-  chunks_created: number;
-  chunks_indexed: number;
-}> {
-  const res = await fetch(`${API_BASE}/api/ingest`, { method: "POST" });
-  if (!res.ok) throw new Error(`Ingest failed: ${res.status}`);
-  return res.json();
-}

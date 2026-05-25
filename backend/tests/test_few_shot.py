@@ -29,6 +29,16 @@ class TestClassifyQuery:
     def test_unknown_defaults_to_factual(self):
         assert classify_query("Hallo") == "factual"
 
+    def test_amendment_and_eligibility_returns_factual(self):
+        # "Eignungssatzung geändert?" matches both — should not restrict to either doc_type
+        assert classify_query("Wurde die Eignungssatzung geändert?") == "factual"
+
+    def test_amendment_alone(self):
+        assert classify_query("Was hat sich 2024 geändert?") == "amendment"
+
+    def test_eligibility_alone(self):
+        assert classify_query("Welche Zugangsvoraussetzungen gibt es?") == "eligibility"
+
 
 class TestGetFewShotExamples:
     def test_returns_list(self):

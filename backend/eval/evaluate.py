@@ -63,9 +63,10 @@ async def evaluate_retrieval(case: dict) -> dict:
     query = case["query"]
     expected_sections = case.get("expected_section_ids", [])
     expected_doc_types = case.get("expected_doc_types", [])
+    program_name = case.get("program_name")
 
     t0 = time.perf_counter()
-    result: RetrievalResult = await retrieve(query)
+    result: RetrievalResult = await retrieve(query, program_name=program_name)
     elapsed_ms = (time.perf_counter() - t0) * 1000
 
     retrieved_sections = [c.section_id for c in result.citations]

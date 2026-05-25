@@ -1,8 +1,11 @@
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 import pymupdf4llm
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -42,6 +45,9 @@ def parse_all_pdfs(documents_dir: str | Path) -> dict[str, list[ParsedPage]]:
     results = {}
 
     for pdf_file in sorted(docs_path.glob("*.pdf")):
-        results[pdf_file.name] = parse_pdf(pdf_file)
+        try:
+            results[pdf_file.name] = parse_pdf(pdf_file)
+        except Exception:
+            logger.warning("Failed to parse %s, skipping", pdf_file.name, exc_info=True)
 
     return results

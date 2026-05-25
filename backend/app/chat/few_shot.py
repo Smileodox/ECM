@@ -5,18 +5,22 @@ import re
 _QUERY_TYPES = {
     "amendment": re.compile(
         r"(?:änderung|geändert|aktualisiert|neufassung|übergangs|alte.+neue|"
-        r"änderungssatzung|was hat sich geändert|seit wann gilt)",
+        r"änderungssatzung|was hat sich geändert|seit wann gilt|neue fassung|"
+        r"amendment|updated|revised|revision)",
         re.IGNORECASE,
     ),
     "eligibility": re.compile(
-        r"(?:eignung|zulassung|voraussetzung|anforderung|bewerbung|zugang|"
-        r"eignungsverfahren|aptitude|admission|aufnahme|"
-        r"requirement|prerequisite|qualification|eligible)",
+        r"(?:eignung|eignungsverfahren|eignungssatzung|eignungsprüfung|"
+        r"zulassung|zulassungsvoraussetzung|zulassungsbedingung|zulassungsordnung|"
+        r"voraussetzung|aufnahmevoraussetzung|zugangsvoraussetzung|"
+        r"anforderung|bewerb|aufnahme|"
+        r"aptitude|admission|requirement|prerequisite|qualification|eligible|"
+        r"wie komme ich rein|kann ich mich bewerben|bin ich zugelassen)",
         re.IGNORECASE,
     ),
     "process": re.compile(
         r"(?:wie melde|wie bewerbe|wie kann ich|was muss ich|anmeldung|ablauf|"
-        r"schritt|verfahren|beantragen|einreichen|anrechnung|"
+        r"schritt|verfahren|beantragen|einreichen|anrechnung|frist|deadline|"
         r"how do i|how can i|how to|register|apply|submit|enroll)",
         re.IGNORECASE,
     ),
@@ -85,10 +89,12 @@ EXAMPLES = {
 
 
 def classify_query(query: str) -> str:
-    for qtype, pattern in _QUERY_TYPES.items():
-        if pattern.search(query):
-            return qtype
-    return "factual"
+    matched = [qtype for qtype, pattern in _QUERY_TYPES.items() if pattern.search(query)]
+    # If amendment AND eligibility both match, the query spans both doc types —
+    # don't restrict by either (fall back to unfiltered "factual" search)
+    if "amendment" in matched and "eligibility" in matched:
+        return "factual"
+    return matched[0] if matched else "factual"
 
 
 def get_few_shot_examples(query: str, max_examples: int = 2) -> list[dict]:

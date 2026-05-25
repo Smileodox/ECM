@@ -3,6 +3,7 @@
 import logging
 import time
 
+import tiktoken as _tiktoken
 from openai import AzureOpenAI, RateLimitError
 
 from app.config import settings
@@ -38,8 +39,8 @@ def generate_summary(pages: list[ParsedPage]) -> str | None:
     first_pages_text = "\n\n".join(p.text for p in pages[:3])
     tokens = count_tokens(first_pages_text)
     if tokens > MAX_INPUT_TOKENS:
-        words = first_pages_text.split()
-        first_pages_text = " ".join(words[:MAX_INPUT_TOKENS])
+        enc = _tiktoken.get_encoding("cl100k_base")
+        first_pages_text = enc.decode(enc.encode(first_pages_text)[:MAX_INPUT_TOKENS])
 
     client = _get_openai_client()
     for attempt in range(3):

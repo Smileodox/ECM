@@ -1,16 +1,46 @@
+import logging
+import uuid
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
-from starlette.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse, Response
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s [%(request_id)s] %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+
+_log_filter_class = type("RequestIDFilter", (logging.Filter,), {
+    "filter": lambda self, record: (setattr(record, "request_id", "-") or True) if not hasattr(record, "request_id") else True,
+})
+for _h in logging.root.handlers:
+    _h.addFilter(_log_filter_class())
 
 from app.config import settings
+from app.limiter import limiter
+from app.models import FeedbackRequest
 from app.routers import chat, ingest
 
-limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
-app = FastAPI(title="campusLMU Chatbot API", version="2.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    from app.search.retriever import close_search_client
+    await close_search_client()
+
+
+app = FastAPI(
+    title="campusLMU Chatbot API",
+    version="2.0.0",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+    lifespan=lifespan,
+)
 app.state.limiter = limiter
 
 
@@ -22,77 +52,86 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     )
 
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next) -> Response:
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        return response
+
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next) -> Response:
+        request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:8]
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
+
+app.add_middleware(RequestIDMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins.split(","),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-Ingest-Key"],
 )
 
 app.include_router(chat.router, prefix="/api")
 app.include_router(ingest.router, prefix="/api")
 
 
+_health_cache: dict = {"status": "ok", "openai_ok": False, "search_ok": False, "checked_at": 0.0}
+
 @app.get("/api/health")
 async def health():
-    """Health check with dependency probing."""
-    checks = {"status": "ok", "openai_ok": False, "search_ok": False}
-    try:
-        from openai import AsyncAzureOpenAI
-        client = AsyncAzureOpenAI(
-            azure_endpoint=settings.azure_openai_endpoint,
-            api_key=settings.azure_openai_api_key,
-            api_version=settings.azure_openai_api_version,
-        )
-        await client.models.list()
-        checks["openai_ok"] = True
-    except Exception:
-        checks["status"] = "degraded"
-
-    try:
-        from azure.core.credentials import AzureKeyCredential
-        from azure.search.documents.aio import SearchClient
-        async with SearchClient(
-            endpoint=settings.azure_search_endpoint,
-            index_name=settings.azure_search_index_name,
-            credential=AzureKeyCredential(settings.azure_search_key),
-        ) as client:
+    """Health check — probes dependencies at most once per minute to avoid billable calls."""
+    import time
+    now = time.monotonic()
+    if now - _health_cache["checked_at"] > 60:
+        checks: dict = {"status": "ok", "openai_ok": False, "search_ok": False}
+        try:
+            from app.search.retriever import _get_search_client
+            client = _get_search_client()
             await client.get_document_count()
-        checks["search_ok"] = True
-    except Exception:
-        checks["status"] = "degraded"
-
-    return checks
+            checks["openai_ok"] = True  # if search is up, config is valid
+            checks["search_ok"] = True
+        except Exception:
+            checks["status"] = "degraded"
+        _health_cache.update(checks)
+        _health_cache["checked_at"] = now
+    return {k: v for k, v in _health_cache.items() if k != "checked_at"}
 
 
 @app.get("/api/programs")
 async def list_programs():
-    from app.chat.engine import _load_program_names
-    return {"programs": _load_program_names()}
+    from app.chat.engine import _load_program_names_async
+    return {"programs": await _load_program_names_async()}
 
 
 @app.post("/api/feedback")
-async def submit_feedback(request: Request):
+@limiter.limit("30/minute")
+async def submit_feedback(request: Request, body: FeedbackRequest):
     """Store user feedback (thumbs up/down) for quality monitoring."""
     import json
     from pathlib import Path
     from datetime import datetime, timezone
 
-    body = await request.json()
-    feedback_dir = Path("feedback")
-    feedback_dir.mkdir(exist_ok=True)
+    entry = json.dumps(
+        {"timestamp": datetime.now(timezone.utc).isoformat(), **body.model_dump()},
+        ensure_ascii=False,
+    ) + "\n"
 
-    entry = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "message_id": body.get("message_id", ""),
-        "rating": body.get("rating", ""),  # "up" or "down"
-        "comment": body.get("comment", ""),
-        "query": body.get("query", ""),
-    }
+    def _write():
+        feedback_dir = Path(settings.feedback_dir)
+        feedback_dir.mkdir(exist_ok=True, parents=True)
+        with open(feedback_dir / "feedback.jsonl", "a") as f:
+            f.write(entry)
 
-    feedback_file = feedback_dir / "feedback.jsonl"
-    with open(feedback_file, "a") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
+    import asyncio
+    await asyncio.to_thread(_write)
     return {"status": "ok"}

@@ -1,22 +1,38 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --lmu-green: #006633;
+  --lmu-green-light: #00804a;
+  --lmu-green-dark: #004d26;
+  --lmu-green-50: #f0faf4;
+  --lmu-green-100: #d9f2e4;
+  --lmu-green-200: #a8e0bf;
+
+  --background: #fafbfc;
+  --foreground: #1a1a1a;
+
+  --shadow-sm: 0 1px 2px rgba(0, 102, 51, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 102, 51, 0.06);
+  --shadow-lg: 0 8px 32px rgba(0, 102, 51, 0.08);
+  --shadow-xl: 0 16px 48px rgba(0, 102, 51, 0.10);
+  --drawer-shadow: -8px 0 32px rgba(0, 0, 0, 0.12);
+
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: #fafbfc;
+  --color-foreground: #1a1a1a;
+  --color-lmu-green: #006633;
+  --color-lmu-green-light: #00804a;
+  --color-lmu-green-dark: #004d26;
+  --color-lmu-green-50: #f0faf4;
+  --color-lmu-green-100: #d9f2e4;
+  --color-lmu-green-200: #a8e0bf;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 html,
@@ -25,4 +41,145 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 102, 51, 0.15);
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 102, 51, 0.25);
+}
+
+/* Keyframes */
+@keyframes messageSlideIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes userMessageSlideIn {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-6px); }
+}
+
+@keyframes drawerSlideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes backdropFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes welcomeFadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes chipHighlight {
+  0% { background-color: rgba(0, 102, 51, 0.15); }
+  100% { background-color: rgba(0, 102, 51, 0.05); }
+}
+
+@keyframes gentlePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 102, 51, 0.2); }
+  50% { box-shadow: 0 0 0 8px rgba(0, 102, 51, 0); }
+}
+
+/* Animation classes */
+.animate-message-in {
+  animation: messageSlideIn var(--transition-normal) both;
+}
+.animate-user-message-in {
+  animation: userMessageSlideIn var(--transition-normal) both;
+}
+.animate-fade-in {
+  animation: fadeIn var(--transition-normal) both;
+}
+.animate-drawer-in {
+  animation: drawerSlideIn var(--transition-slow) both;
+}
+.animate-backdrop-in {
+  animation: backdropFadeIn var(--transition-normal) both;
+}
+.animate-welcome-fade-up {
+  animation: welcomeFadeUp 600ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.animate-chip-highlight {
+  animation: chipHighlight 800ms ease-out both;
+}
+.animate-gentle-pulse {
+  animation: gentlePulse 2s ease-in-out infinite;
+}
+.animate-typing-bounce {
+  animation: typingBounce 1.4s ease-in-out infinite;
+}
+
+/* Streaming cursor */
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.streaming-cursor::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background-color: #006633;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: cursorBlink 1s step-end infinite;
+}
+
+/* Stagger delays */
+.stagger-1 { animation-delay: 100ms; }
+.stagger-2 { animation-delay: 200ms; }
+.stagger-3 { animation-delay: 300ms; }
+.stagger-4 { animation-delay: 400ms; }
+.stagger-5 { animation-delay: 500ms; }
+.stagger-6 { animation-delay: 600ms; }
+
+/* Header scroll state */
+.header-scrolled {
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(12px);
+  background-color: rgba(255, 255, 255, 0.85) !important;
+}
+
+/* Background gradient */
+.lmu-gradient-bg {
+  background: linear-gradient(180deg, #f0faf4 0%, #fafbfc 30%, #ffffff 100%);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .animate-message-in,
+  .animate-user-message-in,
+  .animate-fade-in,
+  .animate-drawer-in,
+  .animate-backdrop-in,
+  .animate-welcome-fade-up,
+  .animate-chip-highlight,
+  .animate-gentle-pulse,
+  .animate-typing-bounce {
+    animation: none !important;
+  }
 }

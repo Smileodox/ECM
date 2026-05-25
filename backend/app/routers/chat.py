@@ -1,16 +1,18 @@
+import asyncio
+import json
+
 from fastapi import APIRouter, HTTPException, Request
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sse_starlette.sse import EventSourceResponse
 
 from app.chat.engine import chat_stream
+from app.limiter import limiter
 from app.models import ChatRequest
 
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
 
 MAX_MESSAGE_LENGTH = 2000
 MAX_HISTORY_LENGTH = 50
+STREAM_TIMEOUT_SECONDS = 120
 
 
 @router.post("/chat")
@@ -18,13 +20,19 @@ MAX_HISTORY_LENGTH = 50
 async def chat(request: Request, body: ChatRequest):
     """Stream a RAG-augmented chat response via Server-Sent Events."""
     if len(body.message) > MAX_MESSAGE_LENGTH:
-        raise HTTPException(status_code=400, detail=f"Message too long (max {MAX_MESSAGE_LENGTH} characters)")
+        raise HTTPException(status_code=400, detail=f"Nachricht zu lang (max {MAX_MESSAGE_LENGTH} Zeichen)")
     if len(body.history) > MAX_HISTORY_LENGTH:
         body.history = body.history[-MAX_HISTORY_LENGTH:]
 
     async def event_generator():
-        async for event in chat_stream(body.message, body.history, program_name=body.program_name):
-            yield event
+        try:
+            async with asyncio.timeout(STREAM_TIMEOUT_SECONDS):
+                async for event in chat_stream(body.message, body.history, program_name=body.program_name):
+                    if await request.is_disconnected():
+                        return
+                    yield event
+        except TimeoutError:
+            yield {"event": "error", "data": json.dumps({"message": "Die Anfrage hat zu lange gedauert. Bitte versuche es erneut."}, ensure_ascii=False)}
 
     return EventSourceResponse(
         event_generator(),

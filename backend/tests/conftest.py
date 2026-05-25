@@ -36,6 +36,7 @@ def make_citation(**overrides) -> Citation:
         content="test content",
         doc_type="psto",
         reranker_score=2.0,
+        chunk_index=0,
     )
     defaults.update(overrides)
     return Citation(**defaults)

@@ -8,13 +8,21 @@ const STORAGE_KEY_MESSAGES = "campuslmu_messages";
 const STORAGE_KEY_PROGRAM = "campuslmu_program";
 const MAX_STORED_MESSAGES = 50;
 
+let _msgCounter = 0;
+function genMsgId(): string {
+  return `msg-${Date.now()}-${++_msgCounter}`;
+}
+
 function loadStoredMessages(): ChatMessage[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_MESSAGES);
+    const raw = sessionStorage.getItem(STORAGE_KEY_MESSAGES);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.slice(-MAX_STORED_MESSAGES);
+    return parsed.slice(-MAX_STORED_MESSAGES).map((m: ChatMessage) => ({
+      ...m,
+      id: m.id || genMsgId(),
+    }));
   } catch {
     return [];
   }
@@ -35,15 +43,21 @@ interface UseChatReturn {
   programName: string | null;
   setProgramName: (name: string | null) => void;
   sendMessage: (content: string) => Promise<void>;
+  stopStreaming: () => void;
   clearMessages: () => void;
   retryLast: () => void;
 }
 
 export function useChat(): UseChatReturn {
-  const [messages, setMessages] = useState<ChatMessage[]>(() => loadStoredMessages());
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [programName, setProgramName] = useState<string | null>(() => loadStoredProgram());
+  const [programName, setProgramName] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMessages(loadStoredMessages());
+    setProgramName(loadStoredProgram());
+  }, []);
 
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
@@ -59,11 +73,12 @@ export function useChat(): UseChatReturn {
   useEffect(() => {
     try {
       const toStore = messages.slice(-MAX_STORED_MESSAGES).map((m) => ({
+        id: m.id,
         role: m.role,
         content: m.content,
         citations: m.citations,
       }));
-      localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(toStore));
+      sessionStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(toStore));
     } catch { /* quota exceeded — ignore */ }
   }, [messages]);
 
@@ -104,7 +119,7 @@ export function useChat(): UseChatReturn {
       bufferRef.current = "";
       fullContentRef.current = "";
 
-      const userMessage: ChatMessage = { role: "user", content };
+      const userMessage: ChatMessage = { id: genMsgId(), role: "user", content };
       const updatedMessages = [...messagesRef.current, userMessage];
       setMessages(updatedMessages);
 
@@ -116,6 +131,7 @@ export function useChat(): UseChatReturn {
 
       // Add placeholder for assistant response
       const assistantMessage: ChatMessage = {
+        id: genMsgId(),
         role: "assistant",
         content: "",
         citations: [],
@@ -166,55 +182,84 @@ export function useChat(): UseChatReturn {
           });
         };
 
+        // SSE parser state — kept outside the read loop so events spanning
+        // multiple chunks are handled correctly (H20)
+        let eventType = "";
+        let dataLines: string[] = [];
+
+        const dispatchEvent = (type: string, data: string) => {
+          try {
+            const parsed = JSON.parse(data);
+            if (type === "pre_citations" && parsed.citation_map) {
+              preCitationMap = parsed.citation_map;
+              setMessages((prev) => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                if (last.role === "assistant") {
+                  updated[updated.length - 1] = { ...last, preCitationMap };
+                }
+                return updated;
+              });
+            } else if (type === "token" && parsed.content) {
+              bufferRef.current += parsed.content;
+              scheduleFlush();
+            } else if (type === "citations" && parsed.citations) {
+              citations = parsed.citations;
+              const normalizedContent: string | undefined = parsed.normalized_content;
+              if (normalizedContent) {
+                // Cancel pending RAF and lock in the backend-normalized content (C6)
+                if (rafRef.current !== null) {
+                  cancelAnimationFrame(rafRef.current);
+                  rafRef.current = null;
+                }
+                bufferRef.current = "";
+                fullContentRef.current = normalizedContent;
+              }
+              setMessages((prev) => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                if (last.role === "assistant") {
+                  updated[updated.length - 1] = {
+                    ...last,
+                    citations,
+                    ...(normalizedContent ? { content: normalizedContent } : {}),
+                  };
+                }
+                return updated;
+              });
+            } else if (type === "detected_program" && parsed.program_name) {
+              setProgramName(parsed.program_name);
+            } else if (type === "error") {
+              setError(parsed.message || "Unknown error");
+            }
+          } catch {
+            // Skip malformed JSON
+          }
+        };
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
           sseBuffer += decoder.decode(value, { stream: true });
 
-          // Parse SSE events from buffer
+          // Parse SSE events from buffer — accumulate data lines per event
+          sseBuffer = sseBuffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
           const lines = sseBuffer.split("\n");
           sseBuffer = lines.pop() || ""; // Keep incomplete line in buffer
 
-          let eventType = "";
           for (const line of lines) {
             if (line.startsWith("event: ")) {
               eventType = line.slice(7).trim();
             } else if (line.startsWith("data: ")) {
-              const data = line.slice(6);
-              try {
-                const parsed = JSON.parse(data);
-
-                if (eventType === "pre_citations" && parsed.citation_map) {
-                  preCitationMap = parsed.citation_map;
-                  setMessages((prev) => {
-                    const updated = [...prev];
-                    const last = updated[updated.length - 1];
-                    if (last.role === "assistant") {
-                      updated[updated.length - 1] = { ...last, preCitationMap };
-                    }
-                    return updated;
-                  });
-                } else if (eventType === "token" && parsed.content) {
-                  // Batch tokens: append to buffer, schedule RAF
-                  bufferRef.current += parsed.content;
-                  scheduleFlush();
-                } else if (eventType === "citations" && parsed.citations) {
-                  citations = parsed.citations;
-                  setMessages((prev) => {
-                    const updated = [...prev];
-                    const last = updated[updated.length - 1];
-                    if (last.role === "assistant") {
-                      updated[updated.length - 1] = { ...last, citations };
-                    }
-                    return updated;
-                  });
-                } else if (eventType === "error") {
-                  setError(parsed.message || "Unknown error");
-                }
-              } catch {
-                // Skip malformed JSON
+              dataLines.push(line.slice(6));
+            } else if (line === "") {
+              // Blank line = event boundary: dispatch accumulated data
+              if (dataLines.length > 0) {
+                dispatchEvent(eventType, dataLines.join("\n"));
               }
+              eventType = "";
+              dataLines = [];
             }
           }
         }
@@ -271,11 +316,16 @@ export function useChat(): UseChatReturn {
     [programName]
   );
 
+  const stopStreaming = useCallback(() => {
+    abortRef.current?.abort();
+    setIsStreaming(false);
+  }, []);
+
   const clearMessages = useCallback(() => {
     abortRef.current?.abort();
     setMessages([]);
     setError(null);
-    try { localStorage.removeItem(STORAGE_KEY_MESSAGES); } catch { /* ignore */ }
+    try { sessionStorage.removeItem(STORAGE_KEY_MESSAGES); } catch { /* ignore */ }
   }, []);
 
   const retryLast = useCallback(() => {
@@ -283,10 +333,12 @@ export function useChat(): UseChatReturn {
     const lastUserIdx = msgs.findLastIndex((m) => m.role === "user");
     if (lastUserIdx === -1) return;
     const lastUserContent = msgs[lastUserIdx].content;
-    setMessages(msgs.slice(0, lastUserIdx));
+    // Update ref directly so sendMessage reads the trimmed history immediately
+    messagesRef.current = msgs.slice(0, lastUserIdx);
+    setMessages(messagesRef.current);
     setError(null);
-    setTimeout(() => sendMessage(lastUserContent), 0);
+    sendMessage(lastUserContent);
   }, [sendMessage]);
 
-  return { messages, isStreaming, error, programName, setProgramName, sendMessage, clearMessages, retryLast };
+  return { messages, isStreaming, error, programName, setProgramName, sendMessage, stopStreaming, clearMessages, retryLast };
 }

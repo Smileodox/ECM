@@ -15,12 +15,20 @@ class Settings(BaseSettings):
     azure_search_key: str
     azure_search_index_name: str = "campuslmu-regulations-v2"
 
+    # Retrieval tuning
+    reranker_min_score: float = 0.8
+    reranker_fallback_score: float = 0.3
+    model_context_limit: int = 128_000
+
     # CORS
     allowed_origins: str = "http://localhost:3000"
 
     # Documents
     documents_dir: str = "../documents"
     lmu_cdn_base_url: str = "https://cms-cdn.lmu.de/media/contenthub/amtliche-veroeffentlichungen"
+
+    # Feedback — /home/feedback is persistent on Azure App Service
+    feedback_dir: str = "/home/feedback"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

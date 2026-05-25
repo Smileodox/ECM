@@ -23,3 +23,9 @@ Thumbs.db
 *.tar.gz
 oryx-manifest.toml
 hostingstart.html
+
+# Data (re-scrape with python -m app.scraper)
+documents/*.pdf
+
+# Test results
+frontend/test-results/

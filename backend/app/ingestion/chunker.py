@@ -291,8 +291,27 @@ def _extract_aenderung_context(pages: list[ParsedPage]) -> str:
     return " ".join(parts)
 
 
+def _split_on_sentences(text: str, max_tokens: int) -> list[str]:
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    chunks: list[str] = []
+    current: list[str] = []
+    current_tokens = 0
+    for sent in sentences:
+        sent_tokens = count_tokens(sent)
+        if current and current_tokens + sent_tokens > max_tokens:
+            chunks.append(" ".join(current))
+            current = [sent]
+            current_tokens = sent_tokens
+        else:
+            current.append(sent)
+            current_tokens += sent_tokens
+    if current:
+        chunks.append(" ".join(current))
+    return chunks if chunks else [text]
+
+
 def _hard_split(text: str, max_tokens: int) -> list[str]:
-    """Split text into chunks of at most max_tokens, splitting on paragraph boundaries."""
+    """Split text into chunks of at most max_tokens, splitting on paragraph then sentence boundaries."""
     if count_tokens(text) <= max_tokens:
         return [text]
     paragraphs = text.split("\n\n")
@@ -301,7 +320,13 @@ def _hard_split(text: str, max_tokens: int) -> list[str]:
     current_tokens = 0
     for para in paragraphs:
         para_tokens = count_tokens(para)
-        if current and current_tokens + para_tokens > max_tokens:
+        if para_tokens > max_tokens:
+            if current:
+                chunks.append("\n\n".join(current))
+                current = []
+                current_tokens = 0
+            chunks.extend(_split_on_sentences(para, max_tokens))
+        elif current and current_tokens + para_tokens > max_tokens:
             chunks.append("\n\n".join(current))
             current = [para]
             current_tokens = para_tokens
@@ -333,14 +358,12 @@ def chunk_document(
     chunk_idx = 0
 
     for section in sections:
-        body = section.body
-        if aenderung_prefix:
-            body = aenderung_prefix + "\n\n" + body
-        tokens = count_tokens(body)
+        section_content = (aenderung_prefix + "\n\n" + section.body) if aenderung_prefix else section.body
+        tokens = count_tokens(section_content)
 
         if tokens <= MAX_CHUNK_TOKENS:
             chunks.append(Chunk(
-                content=body,
+                content=section_content,
                 doc_name=doc_name,
                 doc_filename=doc_filename,
                 section_id=section.section_id,

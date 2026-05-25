@@ -1,9 +1,11 @@
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 
 class ChatMessage(BaseModel):
-    role: str  # "user" or "assistant"
-    content: str
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=10_000)
 
 
 class ChatRequest(BaseModel):
@@ -25,9 +27,17 @@ class Citation(BaseModel):
     content: str
     doc_type: str = ""
     reranker_score: float = 0.0
+    chunk_index: int | None = None
 
 
 class IngestResponse(BaseModel):
     documents_processed: int
     chunks_created: int
     chunks_indexed: int
+
+
+class FeedbackRequest(BaseModel):
+    message_id: str = Field(default="", max_length=100)
+    rating: Literal["up", "down"]
+    comment: str = Field(default="", max_length=2000)
+    query: str = Field(default="", max_length=2000)

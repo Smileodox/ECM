@@ -4,6 +4,8 @@ import re
 import time
 from functools import lru_cache
 
+import tiktoken as _tiktoken
+
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.models import VectorizedQuery
@@ -16,8 +18,6 @@ from app.search.cache import embedding_cache, hyde_cache
 
 logger = logging.getLogger(__name__)
 
-MIN_RERANKER_SCORE = 0.8
-FALLBACK_RERANKER_SCORE = 0.3
 FALLBACK_TOP_K = 5
 MAX_CHUNKS_PER_DOC = 3
 RRF_K = 60  # standard RRF constant
@@ -40,12 +40,25 @@ def _get_openai_client() -> AsyncAzureOpenAI:
     )
 
 
+_search_client: SearchClient | None = None
+
+
 def _get_search_client() -> SearchClient:
-    return SearchClient(
-        endpoint=settings.azure_search_endpoint,
-        index_name=settings.azure_search_index_name,
-        credential=AzureKeyCredential(settings.azure_search_key),
-    )
+    global _search_client
+    if _search_client is None:
+        _search_client = SearchClient(
+            endpoint=settings.azure_search_endpoint,
+            index_name=settings.azure_search_index_name,
+            credential=AzureKeyCredential(settings.azure_search_key),
+        )
+    return _search_client
+
+
+async def close_search_client() -> None:
+    global _search_client
+    if _search_client is not None:
+        await _search_client.close()
+        _search_client = None
 
 
 _RETRY = retry(
@@ -127,6 +140,46 @@ async def _generate_hyde(query: str) -> str:
     return hyde_text
 
 
+async def _generate_expansions(query: str) -> list[str]:
+    """Generate 2 alternative phrasings of the query to improve recall."""
+    cache_key = f"exp:{query}"
+    cached = hyde_cache.get(cache_key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+    client = _get_openai_client()
+    try:
+        response = await client.chat.completions.create(
+            model=settings.azure_openai_mini_deployment,
+            messages=[
+                {"role": "system", "content": (
+                    "Schreibe genau 2 alternative Umformulierungen der folgenden Suchanfrage. "
+                    "Die Anfrage bezieht sich auf deutsche Hochschulrechtsdokumente (Prüfungsordnungen, Eignungssatzungen). "
+                    "Variiere Synonyme und Satzstruktur, behalte aber die ursprüngliche Bedeutung. "
+                    "Gib nur die zwei Umformulierungen aus, eine pro Zeile, ohne Nummerierung."
+                )},
+                {"role": "user", "content": query},
+            ],
+            temperature=0.3,
+            max_tokens=150,
+        )
+    except Exception as e:
+        logger.warning("Query expansion failed (%s), skipping", e)
+        hyde_cache.set(cache_key, [])
+        return []
+    lines = [ln.strip() for ln in response.choices[0].message.content.strip().splitlines() if ln.strip()]
+    seen: set[str] = set()
+    expansions: list[str] = []
+    for ln in lines:
+        if ln not in seen:
+            seen.add(ln)
+            expansions.append(ln)
+        if len(expansions) >= 2:
+            break
+    hyde_cache.set(cache_key, expansions)
+    logger.debug("Query expansions: %s", expansions)
+    return expansions
+
+
 def _build_filter(doc_type: str | None, program_name: str | None) -> str | None:
     parts = []
     if doc_type:
@@ -150,25 +203,32 @@ def _filter_superseded(citations: list[Citation]) -> list[Citation]:
 
 
 def _prefer_amendment_sections(citations: list[Citation]) -> list[Citation]:
-    """When both PSTO §X and current Änderung §X exist for the same program, prefer the Änderung."""
+    """When both PSTO §X Abs. Y and Änderung §X Abs. Y exist for the same program, prefer the Änderung.
+
+    Only removes PSTO chunks where the Änderung covers the same section AND absatz.
+    PSTO chunks with absätze not covered by the amendment are kept.
+    """
     from collections import defaultdict
-    groups: dict[tuple[str, str], list[Citation]] = defaultdict(list)
+    amendment_keys: set[tuple[str, str, str | None]] = set()
     for c in citations:
-        if c.doc_type in ("psto", "aenderung") and c.section_id:
-            groups[(c.program_name, c.section_id)].append(c)
+        if c.doc_type == "aenderung" and c.section_id:
+            amendment_keys.add((c.program_name, c.section_id, c.absatz))
+
+    if not amendment_keys:
+        return citations
 
     to_remove: set[int] = set()
-    for group in groups.values():
-        has_aenderung = any(c.doc_type == "aenderung" for c in group)
-        if not has_aenderung:
+    for c in citations:
+        if c.doc_type != "psto" or not c.section_id:
             continue
-        for c in group:
-            if c.doc_type == "psto":
-                to_remove.add(id(c))
+        key_exact = (c.program_name, c.section_id, c.absatz)
+        key_section = (c.program_name, c.section_id, None)
+        if key_exact in amendment_keys or (c.absatz is not None and key_section in amendment_keys):
+            to_remove.add(id(c))
 
     if to_remove:
         result = [c for c in citations if id(c) not in to_remove]
-        logger.info("Amendment preference: %d PSTO sections superseded by amendments", len(to_remove))
+        logger.info("Amendment preference: %d PSTO chunks superseded by amendments", len(to_remove))
         return result
     return citations
 
@@ -198,7 +258,7 @@ def _reciprocal_rank_fusion(result_lists: list[list[tuple[float, dict]]]) -> lis
             doc_id = doc.get("id", "")
             scores[doc_id] = scores.get(doc_id, 0) + 1.0 / (RRF_K + rank + 1)
             if doc_id not in docs or reranker_score > (docs[doc_id].get("_reranker_score") or 0):
-                docs[doc_id] = doc
+                docs[doc_id] = dict(doc)  # copy to avoid mutating original
                 docs[doc_id]["_reranker_score"] = reranker_score
     merged = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     return [(docs[doc_id].pop("_reranker_score", 0), docs[doc_id]) for doc_id, _ in merged if doc_id in docs]
@@ -211,22 +271,22 @@ async def _search_with_vector(
     top_k: int,
 ) -> list[tuple[float, dict]]:
     """Run hybrid search with vector query + semantic reranker."""
-    async with _get_search_client() as client:
-        results = await client.search(
-            search_text=search_query,
-            vector_queries=[
-                VectorizedQuery(vector=query_vector, k_nearest_neighbors=top_k, fields="content_vector"),
-            ],
-            filter=filter_expr,
-            query_type="semantic",
-            semantic_configuration_name="default",
-            top=top_k,
-            select=_SELECT_FIELDS,
-        )
-        scored: list[tuple[float, dict]] = []
-        async for result in results:
-            score = result.get("@search.reranker_score") or 0.0
-            scored.append((score, dict(result)))
+    client = _get_search_client()
+    results = await client.search(
+        search_text=search_query,
+        vector_queries=[
+            VectorizedQuery(vector=query_vector, k_nearest_neighbors=top_k, fields="content_vector"),
+        ],
+        filter=filter_expr,
+        query_type="semantic",
+        semantic_configuration_name="default",
+        top=top_k,
+        select=_SELECT_FIELDS,
+    )
+    scored: list[tuple[float, dict]] = []
+    async for result in results:
+        score = result.get("@search.reranker_score") or 0.0
+        scored.append((score, dict(result)))
     return scored
 
 
@@ -236,35 +296,36 @@ async def _search_bm25_only(
     top_k: int,
 ) -> list[tuple[float, dict]]:
     """Run BM25-only search with semantic reranker (no vector)."""
-    async with _get_search_client() as client:
-        results = await client.search(
-            search_text=search_query,
-            filter=filter_expr,
-            query_type="semantic",
-            semantic_configuration_name="default",
-            top=top_k,
-            select=_SELECT_FIELDS,
-        )
-        scored: list[tuple[float, dict]] = []
-        async for result in results:
-            score = result.get("@search.reranker_score") or 0.0
-            scored.append((score, dict(result)))
+    client = _get_search_client()
+    results = await client.search(
+        search_text=search_query,
+        filter=filter_expr,
+        query_type="semantic",
+        semantic_configuration_name="default",
+        top=top_k,
+        select=_SELECT_FIELDS,
+    )
+    scored: list[tuple[float, dict]] = []
+    async for result in results:
+        score = result.get("@search.reranker_score") or 0.0
+        scored.append((score, dict(result)))
     return scored
 
 
 async def _fetch_neighbor_chunks(citations: list[Citation]) -> list[Citation]:
-    """Expand top citations with neighboring chunks from the same document."""
+    """Expand top citations with neighboring chunks from the same document.
+
+    Uses a single batch query with an OR filter instead of one query per document.
+    """
     if not citations:
         return citations
 
     targets: list[tuple[Citation, int]] = []
-    doc_filenames: set[str] = set()
-    for c in citations[:5]:
-        chunk_idx = getattr(c, "_chunk_index", None)
+    for c in citations[:3]:
+        chunk_idx = c.chunk_index
         if chunk_idx is None:
             continue
         targets.append((c, chunk_idx))
-        doc_filenames.add(c.doc_filename)
 
     if not targets:
         return citations
@@ -276,36 +337,27 @@ async def _fetch_neighbor_chunks(citations: list[Citation]) -> list[Citation]:
 
     neighbor_content: dict[tuple[str, int], str] = {}
 
-    async def _fetch_doc_chunks(fname: str) -> list[tuple[tuple[str, int], str]]:
-        escaped = fname.replace("'", "''")
-        pairs: list[tuple[tuple[str, int], str]] = []
-        async with _get_search_client() as client:
-            results = await client.search(
-                search_text="*",
-                filter=f"doc_filename eq '{escaped}'",
-                order_by=["chunk_index asc"],
-                top=100,
-                select=["doc_filename", "chunk_index", "content"],
-            )
-            async for r in results:
-                key = (r["doc_filename"], r["chunk_index"])
-                if key in needed:
-                    pairs.append((key, r["content"]))
-        return pairs
-
     try:
-        results_lists = await asyncio.gather(
-            *[_fetch_doc_chunks(fname) for fname in doc_filenames]
+        # Build a precise filter for exactly the chunks we need (at most 6)
+        needed_filters = [
+            f"(doc_filename eq '{fn.replace(chr(39), chr(39)*2)}' and chunk_index eq {idx})"
+            for fn, idx in needed
+        ]
+        client = _get_search_client()
+        results = await client.search(
+            search_text="*",
+            filter=" or ".join(needed_filters),
+            top=len(needed),
+            select=["doc_filename", "chunk_index", "content"],
         )
-        for pairs in results_lists:
-            for key, content in pairs:
-                neighbor_content[key] = content
+        async for r in results:
+            key = (r["doc_filename"], r["chunk_index"])
+            neighbor_content[key] = r["content"]
     except Exception:
         logger.warning("Neighbor chunk fetch failed, continuing without expansion", exc_info=True)
         return citations
 
-    import tiktoken
-    enc = tiktoken.get_encoding("cl100k_base")
+    enc = _tiktoken.encoding_for_model("gpt-4o")
 
     for c, chunk_idx in targets:
         expanded_parts = []
@@ -338,7 +390,7 @@ async def retrieve(
     doc_type: str | None = None,
     program_name: str | None = None,
 ) -> RetrievalResult:
-    """Perform dual-path hybrid search (HyDE vector + BM25) with RRF fusion."""
+    """Perform multi-path hybrid search (HyDE + original + expansions + BM25) with RRF fusion."""
     timing: dict[str, float] = {}
     t0 = time.perf_counter()
 
@@ -347,33 +399,43 @@ async def retrieve(
     if not _is_german(query):
         search_query = await _translate_to_german(query)
 
-    # 2. Generate HyDE + embed in parallel
+    # 2. Generate HyDE, embed original query, and generate expansions in parallel
     t1 = time.perf_counter()
-    hyde_text, _ = await asyncio.gather(
+    hyde_text, orig_vector, expansions = await asyncio.gather(
         _generate_hyde(search_query),
-        asyncio.sleep(0),  # placeholder to keep gather pattern
+        _embed_query(search_query),
+        _generate_expansions(search_query),
     )
-    hyde_vector = await _embed_query(hyde_text)
+    # Embed HyDE text and all expansion phrasings in parallel
+    embed_results = await asyncio.gather(
+        _embed_query(hyde_text),
+        *[_embed_query(exp) for exp in expansions],
+    )
+    hyde_vector = embed_results[0]
+    expansion_vectors = list(embed_results[1:])
     timing["hyde_ms"] = round((time.perf_counter() - t1) * 1000, 1)
 
     filter_expr = _build_filter(doc_type, program_name)
 
-    # 3. Dual-path search: HyDE vector search + BM25 search in parallel
+    # 3. Multi-path search: HyDE vector + original vector + BM25 + expansion vectors
     t2 = time.perf_counter()
-    hyde_results, bm25_results = await asyncio.gather(
+    search_tasks = [
         _search_with_vector(search_query, hyde_vector, filter_expr, top_k),
+        _search_with_vector(search_query, orig_vector, filter_expr, top_k),
         _search_bm25_only(search_query, filter_expr, top_k),
-    )
+        *[_search_with_vector(search_query, vec, filter_expr, top_k) for vec in expansion_vectors],
+    ]
+    all_results = await asyncio.gather(*search_tasks)
     timing["search_ms"] = round((time.perf_counter() - t2) * 1000, 1)
 
-    # 4. Reciprocal Rank Fusion
-    all_scored = _reciprocal_rank_fusion([hyde_results, bm25_results])
+    # 4. Reciprocal Rank Fusion across all paths
+    all_scored = _reciprocal_rank_fusion(list(all_results))
 
     # 5. Apply reranker thresholds
-    primary = [(s, r) for s, r in all_scored if s >= MIN_RERANKER_SCORE]
+    primary = [(s, r) for s, r in all_scored if s >= settings.reranker_min_score]
 
     if not primary:
-        fallback = [(s, r) for s, r in all_scored if s >= FALLBACK_RERANKER_SCORE]
+        fallback = [(s, r) for s, r in all_scored if s >= settings.reranker_fallback_score]
         fallback.sort(key=lambda x: x[0], reverse=True)
         chosen = fallback[:FALLBACK_TOP_K]
         low_confidence = bool(chosen)
@@ -400,13 +462,14 @@ async def retrieve(
             doc_type=result.get("doc_type", ""),
             reranker_score=_score,
         )
-        c._chunk_index = result.get("chunk_index")
+        c.chunk_index = result.get("chunk_index")
         raw_citations.append(c)
 
-    # 7. Version filtering + Diversity
+    # 7. Version filtering + Diversity + Global cap
     citations = _filter_superseded(raw_citations)
     citations = _prefer_amendment_sections(citations)
     citations = _enforce_diversity(citations)
+    citations = citations[:10]
 
     # 8. Neighbor chunk expansion
     t3 = time.perf_counter()
@@ -419,8 +482,8 @@ async def retrieve(
     timing["total_ms"] = round((time.perf_counter() - t0) * 1000, 1)
 
     logger.info(
-        "Retrieved %d citations (from %d raw, low_confidence=%s, hyde+rrf) for query: %s (filter: %s) [%s]",
-        len(citations), len(raw_citations), low_confidence, query[:60],
+        "Retrieved %d citations (from %d raw, low_confidence=%s, %d paths+rrf) for query: %s (filter: %s) [%s]",
+        len(citations), len(raw_citations), low_confidence, len(search_tasks), query[:60],
         filter_expr or "none",
         ", ".join(f"{k}={v}" for k, v in timing.items()),
     )

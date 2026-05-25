@@ -4,10 +4,12 @@ import { useRef, useState } from "react";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
+  onStop: () => void;
+  isStreaming: boolean;
   disabled: boolean;
 }
 
-export function ChatInput({ onSend, disabled }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, isStreaming, disabled }: ChatInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -16,7 +18,6 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     if (!trimmed || disabled) return;
     onSend(trimmed);
     setValue("");
-    // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
@@ -38,8 +39,8 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   };
 
   return (
-    <div className="border-t bg-white px-4 py-3">
-      <div className="mx-auto flex max-w-3xl items-end gap-3">
+    <div className="shrink-0 px-4 py-3 border-t border-gray-100">
+      <div className="mx-auto flex max-w-2xl items-end gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2 shadow-sm focus-within:border-lmu-green focus-within:shadow-md focus-within:ring-2 focus-within:ring-lmu-green/10 transition-all duration-200">
         <textarea
           ref={textareaRef}
           value={value}
@@ -47,29 +48,39 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
           onKeyDown={handleKeyDown}
           onInput={handleInput}
           disabled={disabled}
-          placeholder="Stelle deine Frage zur Studienordnung..."
+          placeholder="Stelle eine Frage..."
           rows={1}
-          className="flex-1 resize-none rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+          maxLength={2000}
+          className="flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:opacity-50"
         />
-        <button
-          onClick={handleSubmit}
-          disabled={disabled || !value.trim()}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-        >
-          <svg
-            className="h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={2}
-            stroke="currentColor"
+        {isStreaming ? (
+          <button
+            onClick={onStop}
+            aria-label="Generierung stoppen"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-800 text-white shadow-sm transition-all duration-200 hover:bg-gray-900 hover:scale-105 active:scale-95"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5"
-            />
-          </svg>
-        </button>
+            <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+          </button>
+        ) : (
+          <button
+            onClick={handleSubmit}
+            disabled={disabled || !value.trim()}
+            aria-label="Nachricht senden"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-lmu-green to-lmu-green-dark text-white shadow-sm transition-all duration-200 hover:shadow-md hover:scale-105 active:scale-95 disabled:bg-gray-200 disabled:from-gray-200 disabled:to-gray-200 disabled:text-gray-400 disabled:shadow-none disabled:cursor-not-allowed"
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={2}
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
+            </svg>
+          </button>
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 fastapi>=0.115
 uvicorn[standard]>=0.32
+gunicorn>=23.0
 sse-starlette>=2.2
 openai>=1.60
 azure-search-documents>=11.6
@@ -10,9 +11,6 @@ pydantic>=2.10
 pydantic-settings>=2.7
 python-dotenv>=1.0
 httpx>=0.28
-playwright>=1.40
 tenacity>=9.0
 slowapi>=0.1.9
 aiohttp>=3.9
-pytest>=8.0
-pytest-asyncio>=0.24
