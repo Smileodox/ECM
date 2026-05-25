@@ -69,6 +69,7 @@ export function useChat(): UseChatReturn {
   const rafRef = useRef<number | null>(null);
   const bufferRef = useRef("");
   const fullContentRef = useRef("");
+  const lastHintedProgramRef = useRef<string | null>(null);
 
   useEffect(() => {
     try {
@@ -229,6 +230,24 @@ export function useChat(): UseChatReturn {
               });
             } else if (type === "detected_program" && parsed.program_name) {
               setProgramName(parsed.program_name);
+              // Show a system hint if this is a new program detection
+              if (parsed.program_name !== lastHintedProgramRef.current) {
+                lastHintedProgramRef.current = parsed.program_name;
+                const hintMsg: ChatMessage = {
+                  id: genMsgId(),
+                  role: "assistant",
+                  content: `Ich beantworte für den Studiengang **${parsed.program_name}**. Falls du einen anderen Studiengang meinst, wähle ihn oben im Dropdown aus.`,
+                  isSystemHint: true,
+                };
+                setMessages((prev) => {
+                  // Insert hint before the last (streaming) assistant message
+                  const last = prev[prev.length - 1];
+                  if (last?.role === "assistant") {
+                    return [...prev.slice(0, -1), hintMsg, last];
+                  }
+                  return [...prev, hintMsg];
+                });
+              }
             } else if (type === "error") {
               setError(parsed.message || "Unknown error");
             }

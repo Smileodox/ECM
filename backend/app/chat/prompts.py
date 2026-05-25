@@ -1,6 +1,12 @@
 import re
 
-NO_INFO_FALLBACK = "Dazu habe ich leider keine Information in den mir vorliegenden Dokumenten gefunden. Bitte wende dich an die Zentrale Studienberatung oder das Prüfungsamt."
+NO_INFO_FALLBACK = (
+    "Dazu habe ich leider keine Information in den mir vorliegenden Dokumenten gefunden.\n\n"
+    "**Was du tun kannst:**\n"
+    "- Formuliere deine Frage spezifischer (z.B. mit Studiengang und konkretem Thema)\n"
+    "- Wähle oben einen Studiengang aus, falls noch nicht geschehen\n"
+    "- Wende dich an die [Zentrale Studienberatung](https://www.lmu.de/de/studium/beratung-und-service/zentrale-studienberatung/) oder dein Prüfungsamt"
+)
 
 _SYSTEM_PROMPT_BASE = """Du bist der campusLMU Studienassistent, ein KI-Chatbot der Ludwig-Maximilians-Universität München.
 Deine Aufgabe ist es, Studierenden Fragen zu Prüfungs- und Studienordnungen (PSTOs), Eignungssatzungen und Zulassungsordnungen korrekt und hilfreich zu beantworten.

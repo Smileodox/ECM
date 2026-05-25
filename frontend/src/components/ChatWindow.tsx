@@ -156,14 +156,29 @@ export function ChatWindow() {
             </div>
           )}
 
-          {messages.map((msg, idx) => (
-            <MessageBubble
-              key={msg.id}
-              message={msg}
-              onCitationClick={handleCitationClick}
-              isStreaming={isStreaming && idx === messages.length - 1 && msg.role === "assistant"}
-            />
-          ))}
+          {messages.map((msg, idx) => {
+            // Find the last user message before this assistant message
+            let lastUserMsg = "";
+            if (msg.role === "assistant") {
+              for (let i = idx - 1; i >= 0; i--) {
+                if (messages[i].role === "user") {
+                  lastUserMsg = messages[i].content;
+                  break;
+                }
+              }
+            }
+            return (
+              <MessageBubble
+                key={msg.id}
+                message={msg}
+                onCitationClick={handleCitationClick}
+                isStreaming={isStreaming && idx === messages.length - 1 && msg.role === "assistant"}
+                lastUserMessage={lastUserMsg}
+                onSendMessage={sendMessage}
+                isSystemHint={msg.isSystemHint}
+              />
+            );
+          })}
 
           {isStreaming &&
             messages[messages.length - 1]?.role === "assistant" &&

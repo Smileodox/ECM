@@ -23,7 +23,45 @@ MAX_CHUNKS_PER_DOC = 3
 RRF_K = 60  # standard RRF constant
 NEIGHBOR_MAX_TOKENS = 2000
 
-_GERMAN_PATTERN = re.compile(r"[äöüßÄÖÜ]|(?:der|die|das|und|für|ist|ein|des|den|dem)\b", re.IGNORECASE)
+_GERMAN_UMLAUT_PATTERN = re.compile(r"[äöüßÄÖÜ]")
+_GERMAN_ARTICLES = re.compile(r"\b(?:der|die|das|und|für|ist|ein|des|den|dem)\b", re.IGNORECASE)
+
+_GERMAN_INDICATOR_WORDS = {
+    "prüfung", "prüfungen", "studiengang", "studiengänge", "semester",
+    "modul", "module", "leistung", "leistungen", "ordnung", "satzung",
+    "studium", "frist", "fristen", "antrag", "arbeit", "pflicht",
+    "note", "noten", "wie", "wann", "kann", "muss", "darf",
+    "welche", "welcher", "welches", "gibt", "habe", "ich",
+    "mich", "sich", "werden", "wurde", "wird", "bei", "nach",
+    "noch", "nicht", "auch", "aber", "oder", "wenn", "mit",
+    "bis", "zur", "zum", "vom", "von", "aus", "nur",
+    "alle", "mein", "meine", "brauche", "bewerben", "bestanden",
+    "wiederholung", "masterarbeit", "bachelorarbeit", "klausur",
+    "anmeldung", "abmeldung", "zulassung", "eignung",
+}
+
+_GERMAN_PROGRAM_NAMES: set[str] | None = None
+
+
+def _load_german_program_names() -> set[str]:
+    global _GERMAN_PROGRAM_NAMES
+    if _GERMAN_PROGRAM_NAMES is not None:
+        return _GERMAN_PROGRAM_NAMES
+    import json as _json
+    from pathlib import Path
+    manifest_path = Path(settings.documents_dir) / "manifest.json"
+    names: set[str] = set()
+    if manifest_path.exists():
+        try:
+            data = _json.loads(manifest_path.read_text())
+            for entry in data.get("entries", []):
+                for p in entry.get("programs", []):
+                    names.add(p.lower())
+        except Exception:
+            pass
+    _GERMAN_PROGRAM_NAMES = names
+    return _GERMAN_PROGRAM_NAMES
+
 
 _TRANSLATION_GLOSSARY = {
     "eligibility": "Eignung",
@@ -120,7 +158,29 @@ async def _embed_query(query: str) -> list[float]:
 
 
 def _is_german(text: str) -> bool:
-    return bool(_GERMAN_PATTERN.search(text))
+    """Robust German detection: umlauts, program names, indicator words."""
+    # Fast path: umlauts are unambiguously German
+    if _GERMAN_UMLAUT_PATTERN.search(text):
+        return True
+
+    text_lower = text.lower()
+
+    # Check if the query contains a known program name from manifest
+    for name in _load_german_program_names():
+        if name in text_lower:
+            return True
+
+    # Check German articles
+    if _GERMAN_ARTICLES.search(text):
+        return True
+
+    # Check for German indicator words — even a single one is strong evidence
+    words = re.findall(r"[a-zäöüß]+", text_lower)
+    if words:
+        if any(w in _GERMAN_INDICATOR_WORDS for w in words):
+            return True
+
+    return False
 
 
 @_RETRY

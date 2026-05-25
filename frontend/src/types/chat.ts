@@ -13,6 +13,7 @@ export interface ChatMessage {
   content: string;
   citations?: Citation[];
   preCitationMap?: Record<number, PreCitationInfo>;
+  isSystemHint?: boolean;
 }
 
 export interface Citation {

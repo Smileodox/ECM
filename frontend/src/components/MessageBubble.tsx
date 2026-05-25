@@ -1,13 +1,17 @@
 "use client";
 
-import { Fragment, useMemo } from "react";
+import { Fragment, useMemo, useState } from "react";
 import type { ChatMessage, Citation, PreCitationInfo } from "@/types/chat";
 import { CitationChip } from "./CitationChip";
+import { submitFeedback } from "@/lib/api";
 
 interface MessageBubbleProps {
   message: ChatMessage;
   onCitationClick: (citation: Citation) => void;
   isStreaming?: boolean;
+  lastUserMessage?: string;
+  onSendMessage?: (text: string) => void;
+  isSystemHint?: boolean;
 }
 
 function buildPreCitation(info: PreCitationInfo): Citation {
@@ -22,6 +26,15 @@ function buildPreCitation(info: PreCitationInfo): Citation {
     content: "",
     doc_type: info.doc_type,
   };
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function parseContent(
@@ -50,7 +63,9 @@ function parseContent(
       }
     }
 
-    const lines = part.split("\n");
+    // Escape HTML entities before markdown parsing to prevent XSS
+    const sanitized = escapeHtml(part);
+    const lines = sanitized.split("\n");
     return (
       <Fragment key={i}>
         {lines.map((line, j) => (
@@ -105,8 +120,9 @@ function renderMarkdownLine(line: string) {
   return renderBold(line);
 }
 
-function renderBold(text: string) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+function renderInline(text: string) {
+  // Split on bold (**...**) and markdown links ([text](url))
+  const parts = text.split(/(\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g);
   return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return (
@@ -115,16 +131,62 @@ function renderBold(text: string) {
         </strong>
       );
     }
+    const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (linkMatch) {
+      return (
+        <a
+          key={i}
+          href={linkMatch[2]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-lmu-green underline hover:text-lmu-green-dark"
+        >
+          {linkMatch[1]}
+        </a>
+      );
+    }
     return part;
   });
+}
+
+/** @deprecated Use renderInline instead — kept as alias for compatibility */
+const renderBold = renderInline;
+
+function getFollowUpSuggestions(content: string): string[] {
+  const lower = content.toLowerCase();
+  if (/masterarbeit/i.test(lower)) {
+    return ["Wie melde ich mich zur Masterarbeit an?", "Kann ich die Masterarbeit verlängern?"];
+  }
+  if (/ects/i.test(lower)) {
+    return ["Welche Module sind Pflicht?", "Wie wird die Note berechnet?"];
+  }
+  if (/wiederholung|nicht bestanden/i.test(lower)) {
+    return ["Wie viele Versuche habe ich?", "Was passiert bei endgültigem Nichtbestehen?"];
+  }
+  if (/eignung|zulassung/i.test(lower)) {
+    return ["Welche Unterlagen brauche ich?", "Bis wann muss ich mich bewerben?"];
+  }
+  return ["Erzähl mir mehr darüber", "Welche weiteren Regelungen gibt es?"];
+}
+
+function ThumbsUpIcon({ filled }: { filled?: boolean }) {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H5.904m7.594-9.745a12.678 12.678 0 0 0-.75 1.32" />
+    </svg>
+  );
 }
 
 export function MessageBubble({
   message,
   onCitationClick,
   isStreaming,
+  lastUserMessage,
+  onSendMessage,
+  isSystemHint,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
+  const [feedbackGiven, setFeedbackGiven] = useState<"up" | "down" | null>(null);
 
   const rendered = useMemo(
     () =>
@@ -139,6 +201,11 @@ export function MessageBubble({
     [message.content, message.citations, message.preCitationMap, isUser, onCitationClick]
   );
 
+  const suggestions = useMemo(
+    () => (!isUser && !isStreaming && !isSystemHint && message.content ? getFollowUpSuggestions(message.content) : []),
+    [isUser, isStreaming, isSystemHint, message.content]
+  );
+
   if (isUser) {
     return (
       <div className="flex justify-end animate-user-message-in">
@@ -151,9 +218,71 @@ export function MessageBubble({
 
   if (!message.content) return null;
 
+  const handleFeedback = (rating: "up" | "down") => {
+    if (feedbackGiven) return;
+    setFeedbackGiven(rating);
+    submitFeedback(rating, lastUserMessage || "").catch(() => {});
+  };
+
   return (
-    <div className={`text-[0.9rem] leading-[1.7] text-gray-700${isStreaming ? " streaming-cursor" : ""}`}>
-      {rendered}
+    <div>
+      <div className={`text-[0.9rem] leading-[1.7] ${isSystemHint ? "text-gray-400 italic" : "text-gray-700"}${isStreaming ? " streaming-cursor" : ""}`}>
+        {rendered}
+      </div>
+
+      {/* Feedback buttons — only for non-streaming, non-hint assistant messages */}
+      {!isStreaming && !isSystemHint && (
+        <div className="flex justify-end gap-1 mt-1.5">
+          <button
+            onClick={() => handleFeedback("up")}
+            disabled={feedbackGiven !== null}
+            className={`p-1 rounded-md transition-colors duration-150 ${
+              feedbackGiven === "up"
+                ? "text-lmu-green"
+                : feedbackGiven
+                  ? "text-gray-200 cursor-default"
+                  : "text-gray-300 hover:text-lmu-green hover:bg-lmu-green-50"
+            }`}
+            aria-label="Hilfreich"
+            title="Hilfreich"
+          >
+            <ThumbsUpIcon filled={feedbackGiven === "up"} />
+          </button>
+          <button
+            onClick={() => handleFeedback("down")}
+            disabled={feedbackGiven !== null}
+            className={`p-1 rounded-md transition-colors duration-150 rotate-180 ${
+              feedbackGiven === "down"
+                ? "text-red-400"
+                : feedbackGiven
+                  ? "text-gray-200 cursor-default"
+                  : "text-gray-300 hover:text-red-400 hover:bg-red-50"
+            }`}
+            aria-label="Nicht hilfreich"
+            title="Nicht hilfreich"
+          >
+            <ThumbsUpIcon filled={feedbackGiven === "down"} />
+          </button>
+        </div>
+      )}
+
+      {/* Follow-up suggestions */}
+      {suggestions.length > 0 && onSendMessage && (
+        <div className="flex flex-wrap gap-2 mt-3">
+          {suggestions.map((text) => (
+            <button
+              key={text}
+              onClick={() => onSendMessage(text)}
+              className="flex items-center gap-1.5 rounded-xl border border-lmu-green-100 bg-white px-3 py-1.5 text-xs text-gray-600 shadow-sm hover:shadow-md hover:border-lmu-green-200 hover:-translate-y-0.5 transition-all duration-200"
+            >
+              <svg className="h-3 w-3 shrink-0 text-lmu-green" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+              </svg>
+              {text}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
