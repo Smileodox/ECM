@@ -289,6 +289,199 @@
       "expected_doc_types": [],
       "language": "de",
       "note": "Overview-Frage — aktuell schwer zu beantworten ohne Doc-Summaries"
+    },
+    {
+      "id": "en_01",
+      "category": "factual",
+      "query": "How many ECTS does the master thesis have in Computer Science?",
+      "program_name": "Informatik",
+      "expected_section_ids": ["§14"],
+      "expected_keywords": ["25", "ECTS", "thesis"],
+      "expected_doc_types": ["psto"],
+      "language": "en"
+    },
+    {
+      "id": "en_02",
+      "category": "factual",
+      "query": "What is the standard duration of the Master in Economics?",
+      "expected_section_ids": ["§5"],
+      "expected_keywords": ["semester", "duration"],
+      "expected_doc_types": ["psto"],
+      "language": "en"
+    },
+    {
+      "id": "en_03",
+      "category": "process",
+      "query": "How do I register for the master thesis?",
+      "expected_section_ids": ["§14"],
+      "expected_keywords": ["registration", "thesis", "Anmeldung"],
+      "expected_doc_types": ["psto"],
+      "language": "en"
+    },
+    {
+      "id": "en_04",
+      "category": "process",
+      "query": "What happens if I fail an exam?",
+      "expected_section_ids": ["§11"],
+      "expected_keywords": ["fail", "repeat", "Wiederholung"],
+      "expected_doc_types": ["psto"],
+      "language": "en"
+    },
+    {
+      "id": "en_05",
+      "category": "factual",
+      "query": "What are the eligibility requirements for the Computer Science master?",
+      "program_name": "Informatik",
+      "expected_section_ids": [],
+      "expected_keywords": ["eligibility", "requirements", "Eignung"],
+      "expected_doc_types": ["eignung"],
+      "language": "en"
+    },
+    {
+      "id": "en_06",
+      "category": "comparison",
+      "query": "What is the difference between PSTO and Eignungssatzung?",
+      "expected_section_ids": [],
+      "expected_keywords": ["PSTO", "Eignungssatzung"],
+      "expected_doc_types": ["psto", "eignung"],
+      "language": "en"
+    },
+    {
+      "id": "en_07",
+      "category": "factual",
+      "query": "Can I write my thesis in English?",
+      "expected_section_ids": ["§14"],
+      "expected_keywords": ["English", "language", "Sprache"],
+      "expected_doc_types": ["psto"],
+      "language": "en"
+    },
+    {
+      "id": "en_08",
+      "category": "process",
+      "query": "How do I get external credits recognized?",
+      "expected_section_ids": ["§27"],
+      "expected_keywords": ["recognition", "credits", "Anrechnung"],
+      "expected_doc_types": ["psto"],
+      "language": "en"
+    },
+    {
+      "id": "en_09",
+      "category": "factual",
+      "query": "Who is on the examination board?",
+      "expected_section_ids": ["§23"],
+      "expected_keywords": ["examination", "board", "Prüfungsausschuss"],
+      "expected_doc_types": ["psto"],
+      "language": "en"
+    },
+    {
+      "id": "en_10",
+      "category": "edge_case",
+      "query": "I need help with my thesis extension",
+      "expected_section_ids": ["§14"],
+      "expected_keywords": ["extension", "Verlängerung"],
+      "expected_doc_types": ["psto"],
+      "language": "en",
+      "note": "Informal English, no question mark"
+    },
+    {
+      "id": "mix_01",
+      "category": "factual",
+      "query": "ECTS Master Informatik?",
+      "program_name": "Informatik",
+      "expected_section_ids": ["§5", "§6"],
+      "expected_keywords": ["ECTS", "120"],
+      "expected_doc_types": ["psto"],
+      "language": "de",
+      "note": "Looks English but is German — no umlauts, no articles"
+    },
+    {
+      "id": "mix_02",
+      "category": "factual",
+      "query": "Wie funktioniert die thesis registration?",
+      "expected_section_ids": ["§14"],
+      "expected_keywords": ["Anmeldung", "Masterarbeit"],
+      "expected_doc_types": ["psto"],
+      "language": "de",
+      "note": "German with English terms"
+    },
+    {
+      "id": "mix_03",
+      "category": "factual",
+      "query": "Management and Digital Technologies Zulassung?",
+      "expected_section_ids": [],
+      "expected_keywords": ["Zulassung"],
+      "expected_doc_types": ["eignung", "zulassung"],
+      "language": "de",
+      "note": "English program name in German query"
+    },
+    {
+      "id": "prog_01",
+      "category": "factual",
+      "query": "Wie viele ECTS hat der Master BWL?",
+      "program_name": "Betriebswirtschaftslehre",
+      "expected_section_ids": ["§5", "§6"],
+      "expected_keywords": ["ECTS", "120"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "prog_02",
+      "category": "factual",
+      "query": "Regelstudienzeit Philosophie Master?",
+      "program_name": "Philosophie",
+      "expected_section_ids": ["§5"],
+      "expected_keywords": ["Semester"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
+    },
+    {
+      "id": "prog_03",
+      "category": "factual",
+      "query": "Gibt es ein Eignungsverfahren für den Master Psychologie?",
+      "program_name": "Psychologie",
+      "expected_section_ids": [],
+      "expected_keywords": ["Eignung"],
+      "expected_doc_types": ["eignung"],
+      "language": "de"
+    },
+    {
+      "id": "prog_04",
+      "category": "process",
+      "query": "Wie bewerbe ich mich für den Master Politikwissenschaft?",
+      "program_name": "Politikwissenschaft",
+      "expected_section_ids": [],
+      "expected_keywords": ["Bewerbung", "Zulassung"],
+      "expected_doc_types": ["eignung", "zulassung"],
+      "language": "de"
+    },
+    {
+      "id": "prog_05",
+      "category": "amendment",
+      "query": "Wurde die PSTO für Dramaturgie geändert?",
+      "program_name": "Dramaturgie",
+      "expected_section_ids": [],
+      "expected_keywords": ["Änderung"],
+      "expected_doc_types": ["aenderung"],
+      "language": "de"
+    },
+    {
+      "id": "complex_01",
+      "category": "process",
+      "query": "Ich habe meine Prüfung zum dritten Mal nicht bestanden. Was passiert jetzt?",
+      "expected_section_ids": ["§11"],
+      "expected_keywords": ["endgültig", "nicht bestanden", "Exmatrikulation"],
+      "expected_doc_types": ["psto"],
+      "language": "de",
+      "note": "Edge case: final failure"
+    },
+    {
+      "id": "complex_02",
+      "category": "factual",
+      "query": "Kann ich Module aus dem Bachelor im Master anrechnen lassen?",
+      "expected_section_ids": ["§27"],
+      "expected_keywords": ["Anrechnung", "Bachelor"],
+      "expected_doc_types": ["psto"],
+      "language": "de"
     }
   ]
 }

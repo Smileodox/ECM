@@ -92,7 +92,7 @@ def _is_german(text: str) -> bool:
 async def _translate_to_german(query: str) -> str:
     client = _get_openai_client()
     response = await client.chat.completions.create(
-        model=settings.azure_openai_mini_deployment,
+        model=settings.azure_openai_deployment,
         messages=[
             {"role": "system", "content": "Translate the user's question to German. Only output the translation, nothing else."},
             {"role": "user", "content": query},
@@ -113,7 +113,7 @@ async def _generate_hyde(query: str) -> str:
     client = _get_openai_client()
     try:
         response = await client.chat.completions.create(
-            model=settings.azure_openai_mini_deployment,
+            model=settings.azure_openai_deployment,
             messages=[
                 {"role": "system", "content": (
                     "Du bist ein Experte für deutsche Hochschulrechtsdokumente. "
@@ -149,7 +149,7 @@ async def _generate_expansions(query: str) -> list[str]:
     client = _get_openai_client()
     try:
         response = await client.chat.completions.create(
-            model=settings.azure_openai_mini_deployment,
+            model=settings.azure_openai_deployment,
             messages=[
                 {"role": "system", "content": (
                     "Schreibe genau 2 alternative Umformulierungen der folgenden Suchanfrage. "

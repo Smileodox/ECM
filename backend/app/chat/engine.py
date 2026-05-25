@@ -240,7 +240,7 @@ async def _is_in_domain(query: str) -> bool:
     client = _get_openai_client()
     try:
         response = await client.chat.completions.create(
-            model=settings.azure_openai_mini_deployment,
+            model=settings.azure_openai_deployment,
             messages=[
                 {"role": "system", "content": _DOMAIN_CLASSIFIER_SYSTEM},
                 {"role": "user", "content": query},
@@ -272,7 +272,7 @@ async def _rewrite_query(message: str, history: list[ChatMessage]) -> str:
     history_text = "\n".join(parts)
     try:
         response = await client.chat.completions.create(
-            model=settings.azure_openai_mini_deployment,
+            model=settings.azure_openai_deployment,
             messages=[
                 {"role": "system", "content": "Rewrite the user's follow-up question as a standalone question that includes all necessary context from the conversation history. Only output the rewritten question, nothing else. If the question is already standalone, return it unchanged. Keep the same language as the original question. Preserve all legal references exactly as written (e.g., §14 Abs. 3, Ziff. 2, Nr. 1). Preserve program names (Studiengangbezeichnungen) exactly."},
                 {"role": "user", "content": f"Conversation:\n{history_text}\n\nFollow-up: {message}"},
