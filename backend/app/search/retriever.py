@@ -41,24 +41,32 @@ def _get_openai_client() -> AsyncAzureOpenAI:
 
 
 _search_client: SearchClient | None = None
+_search_client_created: float = 0
+_SEARCH_CLIENT_MAX_AGE = 3600  # recreate after 1 hour
 
 
 def _get_search_client() -> SearchClient:
-    global _search_client
-    if _search_client is None:
+    global _search_client, _search_client_created
+    now = time.monotonic()
+    if _search_client is None or (now - _search_client_created > _SEARCH_CLIENT_MAX_AGE):
+        if _search_client is not None:
+            # Don't await close here since we're in sync context
+            _search_client = None
         _search_client = SearchClient(
             endpoint=settings.azure_search_endpoint,
             index_name=settings.azure_search_index_name,
             credential=AzureKeyCredential(settings.azure_search_key),
         )
+        _search_client_created = now
     return _search_client
 
 
 async def close_search_client() -> None:
-    global _search_client
+    global _search_client, _search_client_created
     if _search_client is not None:
         await _search_client.close()
         _search_client = None
+        _search_client_created = 0
 
 
 _RETRY = retry(
@@ -389,8 +397,14 @@ async def retrieve(
     top_k: int = 15,
     doc_type: str | None = None,
     program_name: str | None = None,
+    query_type: str | None = None,
 ) -> RetrievalResult:
-    """Perform multi-path hybrid search (HyDE + original + expansions + BM25) with RRF fusion."""
+    """Perform multi-path hybrid search with RRF fusion.
+
+    For factual queries, only 2 search paths (vector + BM25) are used to
+    improve precision and latency.  All other types use the full 5-path
+    pipeline (HyDE + original + BM25 + 2 expansions).
+    """
     timing: dict[str, float] = {}
     t0 = time.perf_counter()
 
@@ -399,32 +413,52 @@ async def retrieve(
     if not _is_german(query):
         search_query = await _translate_to_german(query)
 
-    # 2. Generate HyDE, embed original query, and generate expansions in parallel
+    # 2. Generate embeddings (and optionally HyDE + expansions)
     t1 = time.perf_counter()
-    hyde_text, orig_vector, expansions = await asyncio.gather(
-        _generate_hyde(search_query),
-        _embed_query(search_query),
-        _generate_expansions(search_query),
-    )
-    # Embed HyDE text and all expansion phrasings in parallel
-    embed_results = await asyncio.gather(
-        _embed_query(hyde_text),
-        *[_embed_query(exp) for exp in expansions],
-    )
-    hyde_vector = embed_results[0]
-    expansion_vectors = list(embed_results[1:])
+
+    if query_type in ("factual",):
+        # Precision mode: skip HyDE and expansions, only direct search
+        # This avoids noise from generated content matching generic sections
+        orig_vector = await _embed_query(search_query)
+        expansion_vectors: list[list[float]] = []
+        logger.info("Factual query — using precision mode (2 search paths)")
+    else:
+        # Full mode: all 5 paths for complex queries
+        hyde_text, orig_vector, expansions = await asyncio.gather(
+            _generate_hyde(search_query),
+            _embed_query(search_query),
+            _generate_expansions(search_query),
+        )
+        # Embed HyDE text and all expansion phrasings in parallel
+        embed_results = await asyncio.gather(
+            _embed_query(hyde_text),
+            *[_embed_query(exp) for exp in expansions],
+        )
+        expansion_vectors = list(embed_results[1:])
+
     timing["hyde_ms"] = round((time.perf_counter() - t1) * 1000, 1)
 
     filter_expr = _build_filter(doc_type, program_name)
 
-    # 3. Multi-path search: HyDE vector + original vector + BM25 + expansion vectors
+    # 3. Multi-path search
     t2 = time.perf_counter()
-    search_tasks = [
-        _search_with_vector(search_query, hyde_vector, filter_expr, top_k),
-        _search_with_vector(search_query, orig_vector, filter_expr, top_k),
-        _search_bm25_only(search_query, filter_expr, top_k),
-        *[_search_with_vector(search_query, vec, filter_expr, top_k) for vec in expansion_vectors],
-    ]
+
+    if query_type in ("factual",):
+        # Precision mode: only original vector + BM25 (2 paths)
+        search_tasks = [
+            _search_with_vector(search_query, orig_vector, filter_expr, top_k),
+            _search_bm25_only(search_query, filter_expr, top_k),
+        ]
+    else:
+        # Full mode: HyDE vector + original vector + BM25 + expansion vectors
+        hyde_vector = embed_results[0]
+        search_tasks = [
+            _search_with_vector(search_query, hyde_vector, filter_expr, top_k),
+            _search_with_vector(search_query, orig_vector, filter_expr, top_k),
+            _search_bm25_only(search_query, filter_expr, top_k),
+            *[_search_with_vector(search_query, vec, filter_expr, top_k) for vec in expansion_vectors],
+        ]
+
     all_results = await asyncio.gather(*search_tasks)
     timing["search_ms"] = round((time.perf_counter() - t2) * 1000, 1)
 

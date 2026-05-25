@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 _PROGRAM_NAMES: list[str] | None = None
 _enc = tiktoken.encoding_for_model("gpt-4o")
+MAX_CONTEXT_TOKENS = 8000
 
 
 @lru_cache(maxsize=1)
@@ -365,11 +366,11 @@ async def chat_stream(
 
     # 3. Retrieve relevant chunks (includes HyDE, dual-search, RRF, neighbor expansion)
     t0 = time.perf_counter()
-    result = await retrieve(search_query, doc_type=doc_type, program_name=program_name)
+    result = await retrieve(search_query, doc_type=doc_type, program_name=program_name, query_type=query_type)
 
     # Fallback: if doc_type filter was too restrictive, retry without it
     if doc_type and not result.citations:
-        result = await retrieve(search_query, program_name=program_name)
+        result = await retrieve(search_query, program_name=program_name, query_type=query_type)
         result.low_confidence = True
     timing["retrieve_ms"] = round((time.perf_counter() - t0) * 1000, 1)
     if result.timing:
@@ -384,6 +385,17 @@ async def chat_stream(
 
     # 4. Build prompt with context
     context = build_context(citations)
+
+    # Trim context if it exceeds token budget to avoid blowing the model window
+    context_tokens_count = _count_tokens(context)
+    if context_tokens_count > MAX_CONTEXT_TOKENS:
+        trimmed_citations = citations[:]
+        while trimmed_citations and _count_tokens(build_context(trimmed_citations)) > MAX_CONTEXT_TOKENS:
+            trimmed_citations.pop()  # Remove lowest-ranked (last) citation
+        context = build_context(trimmed_citations)
+        logger.info("Context trimmed from %d to %d citations to fit budget", len(citations), len(trimmed_citations))
+        citations = trimmed_citations
+
     if result.low_confidence:
         context = "**Hinweis: Die folgenden Quellen haben nur eine geringe Relevanz zur Anfrage. Die Antwort könnte unvollständig sein.**\n\n" + context
     user_prompt = build_user_prompt(context, search_query)

@@ -24,6 +24,15 @@ function buildPreCitation(info: PreCitationInfo): Citation {
   };
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function parseContent(
   content: string,
   citations: Citation[],
@@ -50,7 +59,9 @@ function parseContent(
       }
     }
 
-    const lines = part.split("\n");
+    // Escape HTML entities before markdown parsing to prevent XSS
+    const sanitized = escapeHtml(part);
+    const lines = sanitized.split("\n");
     return (
       <Fragment key={i}>
         {lines.map((line, j) => (
