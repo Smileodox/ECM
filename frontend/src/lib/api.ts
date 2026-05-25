@@ -25,3 +25,11 @@ export async function fetchPrograms(): Promise<string[]> {
   return data.programs || [];
 }
 
+export async function submitFeedback(rating: "up" | "down", query: string): Promise<void> {
+  await fetch(`${API_BASE}/api/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rating, query }),
+  });
+}
+

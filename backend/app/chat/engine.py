@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 _PROGRAM_NAMES: list[str] | None = None
 _enc = tiktoken.encoding_for_model("gpt-4o")
+MAX_CONTEXT_TOKENS = 8000
 
 
 @lru_cache(maxsize=1)
@@ -71,57 +72,152 @@ _EN_PROGRAM_MAP = {
     "media informatics": "Medieninformatik",
     "bioinformatics": "Bioinformatik",
     "data science": "Data Science",
+    "statistics and data science": "Statistics and Data Science",
     "mathematics": "Mathematik",
+    "financial and actuarial mathematics": "Finanz- und Versicherungsmathematik",
+    "actuarial mathematics": "Finanz- und Versicherungsmathematik",
     "physics": "Physik",
+    "astrophysics": "Astrophysics",
+    "theoretical and mathematical physics": "Theoretical and Mathematical Physics",
     "chemistry": "Chemie",
     "biochemistry": "Biochemie",
     "biology": "Biologie",
     "molecular biology": "Molekulare Biologie",
+    "molecular and cellular biology": "Molecular and Cellular Biology",
     "ecology": "Ökologie",
+    "evolution, ecology and systematics": "Evolution, Ecology and Systematics",
+    "plant sciences": "Plant Sciences",
     "geology": "Geologie",
+    "engineering geology": "Ingenieur- und Hydrogeologie",
+    "hydrogeology": "Ingenieur- und Hydrogeologie",
+    "geobiology and paleobiology": "Geobiology and Paleobiology",
+    "geomaterials and geochemistry": "Geomaterials and Geochemistry",
     "geophysics": "Geophysik",
     "meteorology": "Meteorologie",
     "statistics": "Statistik",
-    "astrophysics": "Astrophysik",
+    "software engineering": "Software Engineering",
+    "human-computer interaction": "Mensch-Computer-Interaktion",
+    "hci": "Mensch-Computer-Interaktion",
     # Social sciences & humanities
     "law": "Rechtswissenschaften",
     "political science": "Politikwissenschaft",
     "philosophy": "Philosophie",
+    "ancient philosophy": "Antike Philosophie",
+    "theoretical philosophy": "Theoretische Philosophie",
+    "logic and philosophy of science": "Logic and Philosophy of Science",
+    "philosophy, politics and economics": "Philosophie, Politik und Wirtschaft",
+    "ppe": "Philosophie, Politik und Wirtschaft",
     "psychology": "Psychologie",
+    "clinical psychology": "Psychologie: Klinische Psychologie und Psychotherapie",
+    "psychotherapy": "Psychologie: Klinische Psychologie und Psychotherapie",
+    "organizational psychology": "Psychologie: Wirtschafts-, Organisations- und Sozialpsychologie",
+    "neuro-cognitive psychology": "Neuro-cognitive Psychology",
+    "neurosciences": "Neurosciences",
+    "psychology: learning sciences": "Psychology: Learning Sciences and Human Development",
     "sociology": "Soziologie",
     "pedagogy": "Pädagogik",
     "education": "Pädagogik",
     "educational science": "Pädagogik",
+    "education research and management": "Pädagogik mit Schwerpunkt Bildungsforschung und Bildungsmanagement",
+    "music education": "Musikpädagogik",
+    "speech therapy": "Sprachtherapie",
+    "deaf education": "Prävention, Inklusion und Rehabilitation (PIR) - Gehörlosenpädagogik",
+    "hard of hearing education": "Prävention, Inklusion und Rehabilitation (PIR) - Schwerhörigenpädagogik",
+    "pir": "Prävention, Inklusion und Rehabilitation (PIR) - Gehörlosenpädagogik",
+    "business education": "Wirtschaftspädagogik I",
+    "wirtschaftspädagogik": "Wirtschaftspädagogik I",
     "history": "Geschichte",
+    "medieval and renaissance studies": "Mittelalter- und Renaissancestudien",
     "geography": "Geographie",
     "human geography": "Humangeographie",
+    "human geography and sustainability": "Human Geography and Sustainability: Monitoring, Modeling and Management",
+    "environment and society": "Environment and Society",
+    "environmental systems and sustainability": "Umweltsysteme und Nachhaltigkeit - Monitoring, Modellierung und Management",
     "linguistics": "Linguistik",
+    "computational linguistics": "Computerlinguistik mit Nebenfach",
+    "cultural and cognitive linguistics": "Cultural and Cognitive Linguistics",
+    "phonetics": "Phonetik und Sprachverarbeitung",
+    "speech processing": "Phonetik und Sprachverarbeitung",
     "german language": "Germanistik",
     "german studies": "Germanistik",
-    "english studies": "Anglistik",
+    "german linguistics": "Germanistische Linguistik",
+    "german literature": "Germanistische Literaturwissenschaft",
+    "german as a foreign language": "Deutsch als Fremdsprache",
+    "english studies": "English Studies",
     "anglistics": "Anglistik",
     "romantics": "Romanistik",
     "romance studies": "Romanistik",
+    "italian studies": "Italienstudien",
+    "comparative literature": "Allgemeine und Vergleichende Literaturwissenschaft",
+    "literary translation": "Literarisches Übersetzen",
+    "greek philology": "Griechische Philologie",
+    "latin philology": "Lateinische Philologie",
     "journalism": "Journalismus",
+    "journalism, media and globalisation": "Journalism, Media and Globalisation",
+    "strategic communication": "Strategische Kommunikation",
     "communication": "Kommunikationswissenschaft",
+    "communication and media research": "Kommunikations- und Medienforschung",
     "media studies": "Medienwissenschaft",
+    "film and media culture": "Film- und Medienkultur-Forschung",
     "musicology": "Musikwissenschaft",
     "art history": "Kunstgeschichte",
+    "late antique and byzantine art history": "Spätantike und Byzantinische Kunstgeschichte",
     "archaeology": "Archäologie",
+    "classical archaeology": "Klassische Archäologie",
+    "provincial roman archaeology": "Provinzialrömische Archäologie",
+    "prehistoric archaeology": "Vor- und Frühgeschichtliche Archäologie",
+    "near eastern archaeology": "Vorderasiatische Archäologie",
+    "dramaturgy": "Dramaturgie",
+    "theater research": "Theaterforschung und kulturelle Praxis",
+    "digital cultural heritage": "Digital Cultural Heritage",
     "ethnology": "Ethnologie",
+    "cultural anthropology": "Empirische Kulturwissenschaft und Europäische Ethnologie",
+    "european ethnology": "Empirische Kulturwissenschaft und Europäische Ethnologie",
+    "intercultural communication": "Interkulturelle Kommunikation",
     "religious studies": "Religionswissenschaft",
+    "religion and cultural studies": "Religions- und Kulturwissenschaft",
+    "religion and philosophy in asia": "Religion und Philosophie in Asien",
     "theology": "Theologie",
     "catholic theology": "Katholische Theologie",
     "protestant theology": "Evangelische Theologie",
+    "east european studies": "Osteuropastudien",
+    "slavic studies": "Slavistik",
+    "scandinavian studies": "Skandinavistik",
+    "sinology": "Sinologie",
+    "japanese studies": "Japanologie",
+    "near and middle east": "Naher und Mittlerer Osten",
+    "albanian studies": "Albanologie",
+    "ancient oriental studies": "Altorientalistik",
+    "byzantine studies": "Byzantinistik",
+    "modern greek studies": "Neogräzistik",
+    "finno-ugric studies": "Finnougristik",
+    "egyptology": "Ägyptologie und Koptologie",
+    "coptology": "Ägyptologie und Koptologie",
+    "comparative indo-european linguistics": "Vergleichende Indoeuropäische Sprachwissenschaft",
+    "book studies": "Buchwissenschaft: Buch- und Medienforschung",
+    "publishing": "Buchwissenschaft: Verlagspraxis",
+    "american history": "American History, Culture and Society",
+    "computational social science": "Computational Social Science",
     # Business & economics
     "business administration": "Betriebswirtschaftslehre",
     "bwl": "Betriebswirtschaftslehre",
-    "economics": "Volkswirtschaftslehre",
+    "economics": "Economics",
+    "quantitative economics": "Quantitative Economics",
     "vwl": "Volkswirtschaftslehre",
     "management": "Management",
+    "management and digital technologies": "Management and Digital Technologies",
+    "mdt": "Management and Digital Technologies",
+    "european triple degree": "Master of Science in Management - European Triple Degree",
+    "international triple degree": "Master of Science in Management – International Triple Degree",
     "finance": "Finance",
+    "insurance": "Insurance",
     "accounting": "Wirtschaftsprüfung",
     # Life sciences & medicine
+    "epidemiology": "Epidemiologie",
+    "public health": "Public Health",
+    "international health": "International Health",
+    "human biology": "Human Biology - Principles of Health and Disease",
+    "pharmaceutical sciences": "Pharmaceutical Sciences",
     "pharmacy": "Pharmazie",
     "veterinary medicine": "Tiermedizin",
     "veterinary": "Tiermedizin",
@@ -365,11 +461,11 @@ async def chat_stream(
 
     # 3. Retrieve relevant chunks (includes HyDE, dual-search, RRF, neighbor expansion)
     t0 = time.perf_counter()
-    result = await retrieve(search_query, doc_type=doc_type, program_name=program_name)
+    result = await retrieve(search_query, doc_type=doc_type, program_name=program_name, query_type=query_type)
 
     # Fallback: if doc_type filter was too restrictive, retry without it
     if doc_type and not result.citations:
-        result = await retrieve(search_query, program_name=program_name)
+        result = await retrieve(search_query, program_name=program_name, query_type=query_type)
         result.low_confidence = True
     timing["retrieve_ms"] = round((time.perf_counter() - t0) * 1000, 1)
     if result.timing:
@@ -384,6 +480,17 @@ async def chat_stream(
 
     # 4. Build prompt with context
     context = build_context(citations)
+
+    # Trim context if it exceeds token budget to avoid blowing the model window
+    context_tokens_count = _count_tokens(context)
+    if context_tokens_count > MAX_CONTEXT_TOKENS:
+        trimmed_citations = citations[:]
+        while trimmed_citations and _count_tokens(build_context(trimmed_citations)) > MAX_CONTEXT_TOKENS:
+            trimmed_citations.pop()  # Remove lowest-ranked (last) citation
+        context = build_context(trimmed_citations)
+        logger.info("Context trimmed from %d to %d citations to fit budget", len(citations), len(trimmed_citations))
+        citations = trimmed_citations
+
     if result.low_confidence:
         context = "**Hinweis: Die folgenden Quellen haben nur eine geringe Relevanz zur Anfrage. Die Antwort könnte unvollständig sein.**\n\n" + context
     user_prompt = build_user_prompt(context, search_query)
