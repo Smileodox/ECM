@@ -24,6 +24,33 @@ RRF_K = 60  # standard RRF constant
 NEIGHBOR_MAX_TOKENS = 2000
 
 _GERMAN_PATTERN = re.compile(r"[äöüßÄÖÜ]|(?:der|die|das|und|für|ist|ein|des|den|dem)\b", re.IGNORECASE)
+
+_TRANSLATION_GLOSSARY = {
+    "eligibility": "Eignung",
+    "eligibility assessment": "Eignungsverfahren",
+    "eligibility statute": "Eignungssatzung",
+    "admission requirements": "Zulassungsvoraussetzungen",
+    "admission regulations": "Zulassungsordnung",
+    "examination regulations": "Prüfungsordnung",
+    "study regulations": "Studienordnung",
+    "examination and study regulations": "Prüfungs- und Studienordnung",
+    "amendment": "Änderungssatzung",
+    "amendment statute": "Änderungssatzung",
+    "master thesis": "Masterarbeit",
+    "bachelor thesis": "Bachelorarbeit",
+    "standard period of study": "Regelstudienzeit",
+    "compulsory module": "Pflichtmodul",
+    "elective module": "Wahlpflichtmodul",
+    "examination board": "Prüfungsausschuss",
+    "credit points": "ECTS-Punkte",
+    "credits": "ECTS-Punkte",
+    "repeat examination": "Wiederholungsprüfung",
+    "recognition of credits": "Anrechnung von Leistungen",
+    "attendance requirement": "Anwesenheitspflicht",
+    "grading": "Notenberechnung",
+    "thesis extension": "Fristverlängerung",
+    "enrollment": "Immatrikulation",
+}
 _SELECT_FIELDS = [
     "id", "content", "doc_name", "doc_filename", "source_url",
     "section_id", "section_title", "absatz", "page_number",
@@ -41,24 +68,32 @@ def _get_openai_client() -> AsyncAzureOpenAI:
 
 
 _search_client: SearchClient | None = None
+_search_client_created: float = 0
+_SEARCH_CLIENT_MAX_AGE = 3600  # recreate after 1 hour
 
 
 def _get_search_client() -> SearchClient:
-    global _search_client
-    if _search_client is None:
+    global _search_client, _search_client_created
+    now = time.monotonic()
+    if _search_client is None or (now - _search_client_created > _SEARCH_CLIENT_MAX_AGE):
+        if _search_client is not None:
+            # Don't await close here since we're in sync context
+            _search_client = None
         _search_client = SearchClient(
             endpoint=settings.azure_search_endpoint,
             index_name=settings.azure_search_index_name,
             credential=AzureKeyCredential(settings.azure_search_key),
         )
+        _search_client_created = now
     return _search_client
 
 
 async def close_search_client() -> None:
-    global _search_client
+    global _search_client, _search_client_created
     if _search_client is not None:
         await _search_client.close()
         _search_client = None
+        _search_client_created = 0
 
 
 _RETRY = retry(
@@ -91,10 +126,18 @@ def _is_german(text: str) -> bool:
 @_RETRY
 async def _translate_to_german(query: str) -> str:
     client = _get_openai_client()
+    query_lower = query.lower()
+    glossary_matches = {
+        k: v for k, v in _TRANSLATION_GLOSSARY.items() if k in query_lower
+    }
+    system_prompt = "Translate the user's question to German. Only output the translation, nothing else."
+    if glossary_matches:
+        terms = ", ".join(f'"{k}" → "{v}"' for k, v in glossary_matches.items())
+        system_prompt += f" Use these domain-specific translations: {terms}"
     response = await client.chat.completions.create(
-        model=settings.azure_openai_mini_deployment,
+        model=settings.azure_openai_deployment,
         messages=[
-            {"role": "system", "content": "Translate the user's question to German. Only output the translation, nothing else."},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": query},
         ],
         temperature=0,
@@ -113,7 +156,7 @@ async def _generate_hyde(query: str) -> str:
     client = _get_openai_client()
     try:
         response = await client.chat.completions.create(
-            model=settings.azure_openai_mini_deployment,
+            model=settings.azure_openai_deployment,
             messages=[
                 {"role": "system", "content": (
                     "Du bist ein Experte für deutsche Hochschulrechtsdokumente. "
@@ -149,7 +192,7 @@ async def _generate_expansions(query: str) -> list[str]:
     client = _get_openai_client()
     try:
         response = await client.chat.completions.create(
-            model=settings.azure_openai_mini_deployment,
+            model=settings.azure_openai_deployment,
             messages=[
                 {"role": "system", "content": (
                     "Schreibe genau 2 alternative Umformulierungen der folgenden Suchanfrage. "
@@ -233,6 +276,49 @@ def _prefer_amendment_sections(citations: list[Citation]) -> list[Citation]:
     return citations
 
 
+def _deduplicate_cross_program(citations: list[Citation]) -> list[Citation]:
+    """Deduplicate identical sections across different programs.
+
+    Groups by (section_id, absatz). Within each group, if all citations share the
+    same doc_type, keep only the one with the highest reranker_score. If a group
+    has mixed doc_types (e.g. psto + aenderung), keep the best per doc_type.
+    """
+    from collections import defaultdict
+    groups: dict[tuple[str, str | None], list[Citation]] = defaultdict(list)
+    ungrouped: list[Citation] = []
+    for c in citations:
+        if c.section_id:
+            groups[(c.section_id, c.absatz)].append(c)
+        else:
+            ungrouped.append(c)
+
+    result: list[Citation] = list(ungrouped)
+    for key, group in groups.items():
+        if len(group) <= 1:
+            result.extend(group)
+            continue
+        # Check if there are multiple doc_types
+        doc_types = {c.doc_type for c in group}
+        if len(doc_types) <= 1:
+            # Same doc_type across programs — keep only highest scored
+            best = max(group, key=lambda c: c.reranker_score)
+            result.append(best)
+        else:
+            # Mixed doc_types — keep the best per doc_type
+            by_type: dict[str, Citation] = {}
+            for c in group:
+                if c.doc_type not in by_type or c.reranker_score > by_type[c.doc_type].reranker_score:
+                    by_type[c.doc_type] = c
+            result.extend(by_type.values())
+
+    removed = len(citations) - len(result)
+    if removed:
+        logger.info("Cross-program dedup: removed %d duplicate sections (%d → %d)", removed, len(citations), len(result))
+    # Preserve original score ordering
+    result.sort(key=lambda c: c.reranker_score, reverse=True)
+    return result
+
+
 def _enforce_diversity(citations: list[Citation]) -> list[Citation]:
     """Limit to MAX_CHUNKS_PER_DOC chunks per document, keeping highest-scored."""
     doc_counts: dict[str, int] = {}
@@ -247,6 +333,23 @@ def _enforce_diversity(citations: list[Citation]) -> list[Citation]:
     if len(diverse) < len(citations):
         logger.info("Diversity filter: %d → %d citations", len(citations), len(diverse))
     return diverse
+
+
+def _boost_title_matches(query: str, scored: list[tuple[float, dict]]) -> list[tuple[float, dict]]:
+    """Boost RRF scores for results whose section_title contains significant query keywords."""
+    keywords = {w.lower() for w in query.split() if len(w) >= 4}
+    if not keywords:
+        return scored
+    boosted: list[tuple[float, dict]] = []
+    for score, doc in scored:
+        title = (doc.get("section_title") or "").lower()
+        title_words = set(title.split())
+        if keywords & title_words:
+            boosted.append((score + 0.3, doc))
+        else:
+            boosted.append((score, doc))
+    boosted.sort(key=lambda x: x[0], reverse=True)
+    return boosted
 
 
 def _reciprocal_rank_fusion(result_lists: list[list[tuple[float, dict]]]) -> list[tuple[float, dict]]:
@@ -389,8 +492,14 @@ async def retrieve(
     top_k: int = 15,
     doc_type: str | None = None,
     program_name: str | None = None,
+    query_type: str | None = None,
 ) -> RetrievalResult:
-    """Perform multi-path hybrid search (HyDE + original + expansions + BM25) with RRF fusion."""
+    """Perform multi-path hybrid search with RRF fusion.
+
+    For factual queries, only 2 search paths (vector + BM25) are used to
+    improve precision and latency.  All other types use the full 5-path
+    pipeline (HyDE + original + BM25 + 2 expansions).
+    """
     timing: dict[str, float] = {}
     t0 = time.perf_counter()
 
@@ -399,37 +508,60 @@ async def retrieve(
     if not _is_german(query):
         search_query = await _translate_to_german(query)
 
-    # 2. Generate HyDE, embed original query, and generate expansions in parallel
+    # 2. Generate embeddings (and optionally HyDE + expansions)
     t1 = time.perf_counter()
-    hyde_text, orig_vector, expansions = await asyncio.gather(
-        _generate_hyde(search_query),
-        _embed_query(search_query),
-        _generate_expansions(search_query),
-    )
-    # Embed HyDE text and all expansion phrasings in parallel
-    embed_results = await asyncio.gather(
-        _embed_query(hyde_text),
-        *[_embed_query(exp) for exp in expansions],
-    )
-    hyde_vector = embed_results[0]
-    expansion_vectors = list(embed_results[1:])
+
+    if query_type in ("factual",):
+        # Precision mode: skip HyDE and expansions, only direct search
+        # This avoids noise from generated content matching generic sections
+        orig_vector = await _embed_query(search_query)
+        expansion_vectors: list[list[float]] = []
+        logger.info("Factual query — using precision mode (2 search paths)")
+    else:
+        # Full mode: all 5 paths for complex queries
+        hyde_text, orig_vector, expansions = await asyncio.gather(
+            _generate_hyde(search_query),
+            _embed_query(search_query),
+            _generate_expansions(search_query),
+        )
+        # Embed HyDE text and all expansion phrasings in parallel
+        embed_results = await asyncio.gather(
+            _embed_query(hyde_text),
+            *[_embed_query(exp) for exp in expansions],
+        )
+        expansion_vectors = list(embed_results[1:])
+
     timing["hyde_ms"] = round((time.perf_counter() - t1) * 1000, 1)
 
     filter_expr = _build_filter(doc_type, program_name)
 
-    # 3. Multi-path search: HyDE vector + original vector + BM25 + expansion vectors
+    # 3. Multi-path search
     t2 = time.perf_counter()
-    search_tasks = [
-        _search_with_vector(search_query, hyde_vector, filter_expr, top_k),
-        _search_with_vector(search_query, orig_vector, filter_expr, top_k),
-        _search_bm25_only(search_query, filter_expr, top_k),
-        *[_search_with_vector(search_query, vec, filter_expr, top_k) for vec in expansion_vectors],
-    ]
+
+    if query_type in ("factual",):
+        # Precision mode: only original vector + BM25 (2 paths)
+        search_tasks = [
+            _search_with_vector(search_query, orig_vector, filter_expr, top_k),
+            _search_bm25_only(search_query, filter_expr, top_k),
+        ]
+    else:
+        # Full mode: HyDE vector + original vector + BM25 + expansion vectors
+        hyde_vector = embed_results[0]
+        search_tasks = [
+            _search_with_vector(search_query, hyde_vector, filter_expr, top_k),
+            _search_with_vector(search_query, orig_vector, filter_expr, top_k),
+            _search_bm25_only(search_query, filter_expr, top_k),
+            *[_search_with_vector(search_query, vec, filter_expr, top_k) for vec in expansion_vectors],
+        ]
+
     all_results = await asyncio.gather(*search_tasks)
     timing["search_ms"] = round((time.perf_counter() - t2) * 1000, 1)
 
     # 4. Reciprocal Rank Fusion across all paths
     all_scored = _reciprocal_rank_fusion(list(all_results))
+
+    # 4b. Boost results whose section_title matches query keywords
+    all_scored = _boost_title_matches(search_query, all_scored)
 
     # 5. Apply reranker thresholds
     primary = [(s, r) for s, r in all_scored if s >= settings.reranker_min_score]
@@ -465,9 +597,10 @@ async def retrieve(
         c.chunk_index = result.get("chunk_index")
         raw_citations.append(c)
 
-    # 7. Version filtering + Diversity + Global cap
+    # 7. Version filtering + Cross-program dedup + Diversity + Global cap
     citations = _filter_superseded(raw_citations)
     citations = _prefer_amendment_sections(citations)
+    citations = _deduplicate_cross_program(citations)
     citations = _enforce_diversity(citations)
     citations = citations[:10]
 
