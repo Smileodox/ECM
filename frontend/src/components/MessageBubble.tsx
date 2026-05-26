@@ -86,12 +86,12 @@ function renderMarkdownLine(line: string) {
     const text = headingMatch[2];
     const className =
       level === 1
-        ? "text-base font-semibold mt-4 mb-1.5 text-gray-900"
+        ? "text-base font-semibold mt-4 mb-1.5 text-text-primary"
         : level === 2
-          ? "text-[0.94rem] font-semibold mt-4 mb-1.5 text-gray-900"
+          ? "text-[0.94rem] font-semibold mt-4 mb-1.5 text-text-primary"
           : level === 3
-            ? "text-sm font-semibold mt-3 mb-1 text-gray-800"
-            : "text-sm font-medium mt-2 text-gray-800";
+            ? "text-sm font-semibold mt-3 mb-1 text-text-secondary"
+            : "text-sm font-medium mt-2 text-text-secondary";
     return <div className={className}>{renderBold(text)}</div>;
   }
 
@@ -109,7 +109,7 @@ function renderMarkdownLine(line: string) {
   if (numberedMatch) {
     return (
       <span className="flex gap-2.5 py-0.5">
-        <span className="text-gray-400 select-none min-w-[1.5em] text-right tabular-nums">
+        <span className="text-text-muted select-none min-w-[1.5em] text-right tabular-nums">
           {numberedMatch[1]}.
         </span>
         <span>{renderBold(numberedMatch[2])}</span>
@@ -126,7 +126,7 @@ function renderInline(text: string) {
   return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return (
-        <strong key={i} className="font-semibold text-gray-900">
+        <strong key={i} className="font-semibold text-text-primary">
           {part.slice(2, -2)}
         </strong>
       );
@@ -152,21 +152,22 @@ function renderInline(text: string) {
 /** @deprecated Use renderInline instead — kept as alias for compatibility */
 const renderBold = renderInline;
 
-function getFollowUpSuggestions(content: string): string[] {
+function getFollowUpSuggestions(content: string, userQuestion: string): string[] {
   const lower = content.toLowerCase();
-  if (/masterarbeit/i.test(lower)) {
-    return ["Wie melde ich mich zur Masterarbeit an?", "Kann ich die Masterarbeit verlängern?"];
+  const qLower = userQuestion.toLowerCase();
+  if (/masterarbeit|master.?s?\s*thesis/i.test(lower) && !/masterarbeit|thesis/i.test(qLower)) {
+    return ["How do I register for the master's thesis?", "Can I extend the master's thesis deadline?"];
   }
-  if (/ects/i.test(lower)) {
-    return ["Welche Module sind Pflicht?", "Wie wird die Note berechnet?"];
+  if (/ects|credits?/i.test(lower) && !/ects|credits?/i.test(qLower)) {
+    return ["Which modules are mandatory?", "How is the grade calculated?"];
   }
-  if (/wiederholung|nicht bestanden/i.test(lower)) {
-    return ["Wie viele Versuche habe ich?", "Was passiert bei endgültigem Nichtbestehen?"];
+  if (/wiederholung|nicht bestanden|fail|repeat/i.test(lower)) {
+    return ["How many attempts do I have?", "What happens if I permanently fail?"];
   }
-  if (/eignung|zulassung/i.test(lower)) {
-    return ["Welche Unterlagen brauche ich?", "Bis wann muss ich mich bewerben?"];
+  if (/eignung|zulassung|admission|eligib/i.test(lower)) {
+    return ["What documents do I need?", "What is the application deadline?"];
   }
-  return ["Erzähl mir mehr darüber", "Welche weiteren Regelungen gibt es?"];
+  return ["Tell me more about this", "What other regulations apply?"];
 }
 
 function ThumbsUpIcon({ filled }: { filled?: boolean }) {
@@ -202,8 +203,8 @@ export function MessageBubble({
   );
 
   const suggestions = useMemo(
-    () => (!isUser && !isStreaming && !isSystemHint && message.content ? getFollowUpSuggestions(message.content) : []),
-    [isUser, isStreaming, isSystemHint, message.content]
+    () => (!isUser && !isStreaming && !isSystemHint && message.content ? getFollowUpSuggestions(message.content, lastUserMessage || "") : []),
+    [isUser, isStreaming, isSystemHint, message.content, lastUserMessage]
   );
 
   if (isUser) {
@@ -226,7 +227,7 @@ export function MessageBubble({
 
   return (
     <div>
-      <div className={`text-[0.9rem] leading-[1.7] ${isSystemHint ? "text-gray-400 italic" : "text-gray-700"}${isStreaming ? " streaming-cursor" : ""}`}>
+      <div className={`text-[0.9rem] leading-[1.7] ${isSystemHint ? "text-text-muted italic" : "text-text-secondary"}${isStreaming ? " streaming-cursor" : ""}`}>
         {rendered}
       </div>
 
@@ -240,11 +241,11 @@ export function MessageBubble({
               feedbackGiven === "up"
                 ? "text-lmu-green"
                 : feedbackGiven
-                  ? "text-gray-200 cursor-default"
-                  : "text-gray-300 hover:text-lmu-green hover:bg-lmu-green-50"
+                  ? "text-border-strong cursor-default"
+                  : "text-text-muted hover:text-lmu-green hover:bg-lmu-green-50"
             }`}
-            aria-label="Hilfreich"
-            title="Hilfreich"
+            aria-label="Helpful"
+            title="Helpful"
           >
             <ThumbsUpIcon filled={feedbackGiven === "up"} />
           </button>
@@ -255,11 +256,11 @@ export function MessageBubble({
               feedbackGiven === "down"
                 ? "text-red-400"
                 : feedbackGiven
-                  ? "text-gray-200 cursor-default"
-                  : "text-gray-300 hover:text-red-400 hover:bg-red-50"
+                  ? "text-border-strong cursor-default"
+                  : "text-text-muted hover:text-red-400 hover:bg-red-50"
             }`}
-            aria-label="Nicht hilfreich"
-            title="Nicht hilfreich"
+            aria-label="Not helpful"
+            title="Not helpful"
           >
             <ThumbsUpIcon filled={feedbackGiven === "down"} />
           </button>
@@ -273,7 +274,8 @@ export function MessageBubble({
             <button
               key={text}
               onClick={() => onSendMessage(text)}
-              className="flex items-center gap-1.5 rounded-xl border border-lmu-green-100 bg-white px-3 py-1.5 text-xs text-gray-600 shadow-sm hover:shadow-md hover:border-lmu-green-200 hover:-translate-y-0.5 transition-all duration-200"
+              aria-label={`Follow-up: ${text}`}
+              className="flex items-center gap-1.5 rounded-xl border border-lmu-green-100 bg-surface px-3 py-1.5 text-xs text-text-secondary shadow-sm hover:shadow-md hover:border-lmu-green-200 hover:-translate-y-0.5 transition-all duration-200"
             >
               <svg className="h-3 w-3 shrink-0 text-lmu-green" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />

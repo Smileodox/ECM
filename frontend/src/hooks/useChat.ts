@@ -236,7 +236,7 @@ export function useChat(): UseChatReturn {
                 const hintMsg: ChatMessage = {
                   id: genMsgId(),
                   role: "assistant",
-                  content: `Ich beantworte für den Studiengang **${parsed.program_name}**. Falls du einen anderen Studiengang meinst, wähle ihn oben im Dropdown aus.`,
+                  content: `Answering for the program **${parsed.program_name}**. If you mean a different program, select it from the dropdown above.`,
                   isSystemHint: true,
                 };
                 setMessages((prev) => {
@@ -313,11 +313,11 @@ export function useChat(): UseChatReturn {
         const raw = err instanceof Error ? err.message : "Connection failed";
         let friendlyError = raw;
         if (raw.includes("Failed to fetch") || raw.includes("NetworkError")) {
-          friendlyError = "Verbindung zum Server fehlgeschlagen. Bitte pruefe deine Internetverbindung.";
+          friendlyError = "Could not connect to the server. Please check your internet connection.";
         } else if (raw.includes("500") || raw.includes("502") || raw.includes("503")) {
-          friendlyError = "Der Server ist momentan nicht erreichbar. Bitte versuche es in wenigen Sekunden erneut.";
+          friendlyError = "The server is currently unavailable. Please try again in a few seconds.";
         } else if (raw.includes("429")) {
-          friendlyError = "Zu viele Anfragen. Bitte warte einen Moment und versuche es dann erneut.";
+          friendlyError = "Too many requests. Please wait a moment and try again.";
         }
         setError(friendlyError);
         // Remove the empty assistant message on error

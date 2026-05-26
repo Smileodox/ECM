@@ -39,8 +39,8 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled }: ChatInputPr
   };
 
   return (
-    <div className="shrink-0 px-4 py-3 border-t border-gray-100">
-      <div className="mx-auto flex max-w-2xl items-end gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2 shadow-sm focus-within:border-lmu-green focus-within:shadow-md focus-within:ring-2 focus-within:ring-lmu-green/10 transition-all duration-200">
+    <div className="shrink-0 px-4 py-3 border-t border-border-default">
+      <div className="mx-auto flex max-w-2xl items-end gap-2 rounded-2xl border border-border-strong bg-surface px-4 py-2 shadow-sm focus-within:border-lmu-green focus-within:shadow-md focus-within:ring-2 focus-within:ring-lmu-green/10 transition-all duration-200">
         <textarea
           ref={textareaRef}
           value={value}
@@ -48,16 +48,17 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled }: ChatInputPr
           onKeyDown={handleKeyDown}
           onInput={handleInput}
           disabled={disabled}
-          placeholder="Stelle eine Frage..."
+          placeholder="Ask a question..."
+          aria-label="Enter message"
           rows={1}
           maxLength={2000}
-          className="flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:opacity-50"
+          className="flex-1 resize-none bg-transparent py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none disabled:opacity-50"
         />
         {isStreaming ? (
           <button
             onClick={onStop}
-            aria-label="Generierung stoppen"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-800 text-white shadow-sm transition-all duration-200 hover:bg-gray-900 hover:scale-105 active:scale-95"
+            aria-label="Stop generating"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-text-primary text-background shadow-sm transition-all duration-200 hover:opacity-90 hover:scale-105 active:scale-95"
           >
             <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
               <rect x="6" y="6" width="12" height="12" rx="2" />
@@ -67,8 +68,8 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled }: ChatInputPr
           <button
             onClick={handleSubmit}
             disabled={disabled || !value.trim()}
-            aria-label="Nachricht senden"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-lmu-green to-lmu-green-dark text-white shadow-sm transition-all duration-200 hover:shadow-md hover:scale-105 active:scale-95 disabled:bg-gray-200 disabled:from-gray-200 disabled:to-gray-200 disabled:text-gray-400 disabled:shadow-none disabled:cursor-not-allowed"
+            aria-label="Send message"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-lmu-green to-lmu-green-dark text-white shadow-sm transition-all duration-200 hover:shadow-md hover:scale-105 active:scale-95 disabled:bg-border-strong disabled:from-border-strong disabled:to-border-strong disabled:text-text-muted disabled:shadow-none disabled:cursor-not-allowed"
           >
             <svg
               className="h-4 w-4"

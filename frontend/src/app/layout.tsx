@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "campusLMU Studienassistent",
-  description: "KI-Chatbot fuer Fragen zu Studien- und Pruefungsordnungen der LMU Muenchen",
+  title: "campusLMU Study Assistant",
+  description: "AI chatbot for questions about study and exam regulations at LMU Munich",
 };
 
 export const viewport: Viewport = {
@@ -28,7 +28,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="de"
+      lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="h-full flex flex-col">{children}</body>

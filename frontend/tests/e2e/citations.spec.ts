@@ -4,27 +4,26 @@
 
 import { test, expect } from "@playwright/test";
 
-const TEXTAREA = 'textarea[placeholder="Stelle deine Frage zur Studienordnung..."]';
-const SEND_BUTTON = "button:has(svg).rounded-xl";
-const ASSISTANT_BUBBLE = ".justify-start .rounded-2xl";
-const CITATION_CHIP = ".bg-blue-50.border-blue-200"; // CitationChip classes
-const CITATION_DRAWER = ".fixed.right-0.top-0"; // CitationDrawer outer div
-const DRAWER_CLOSE = `${CITATION_DRAWER} button:has(svg)`;
+const TEXTAREA = 'textarea[placeholder="Ask a question..."]';
+const SEND_BUTTON = "button:has(svg).rounded-full";
+const ASSISTANT_TEXT = ".text-text-secondary";
+const CITATION_CHIP = "button.bg-lmu-green-50";
+const CITATION_DRAWER = '[role="dialog"]';
 const BACKDROP = ".fixed.inset-0.bg-black\\/20";
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
   await page.evaluate(() => {
-    localStorage.removeItem("campuslmu_messages");
+    sessionStorage.removeItem("campuslmu_messages");
     localStorage.removeItem("campuslmu_program");
   });
   await page.reload();
 
   // Send a query likely to produce citations
   await page.fill(TEXTAREA, "Wie viele ECTS umfasst der Master Informatik?");
-  await page.click(SEND_BUTTON);
+  await page.locator(SEND_BUTTON).last().click();
   // Wait for full response with citations (chips appear after final citations SSE event)
-  await expect(page.locator(ASSISTANT_BUBBLE).first()).not.toBeEmpty({ timeout: 45_000 });
+  await expect(page.locator(ASSISTANT_TEXT).first()).not.toBeEmpty({ timeout: 45_000 });
   await expect(page.locator(CITATION_CHIP).first()).toBeVisible({ timeout: 15_000 });
 });
 
@@ -43,19 +42,19 @@ test("click citation chip — drawer opens with content", async ({ page }) => {
   const drawer = page.locator(CITATION_DRAWER);
   await expect(drawer).toBeVisible();
 
-  // Drawer must show "Quelle N" heading and document metadata
-  await expect(drawer.locator("text=Quelle")).toBeVisible();
-  await expect(drawer.locator("text=Dokument:")).toBeVisible();
-  await expect(drawer.locator("text=Seite:")).toBeVisible();
-  await expect(drawer.locator("text=Originaltext")).toBeVisible();
+  // Drawer must show "Source N" heading and document metadata
+  await expect(drawer.locator("text=Source")).toBeVisible();
+  await expect(drawer.locator("text=Document:")).toBeVisible();
+  await expect(drawer.locator("text=Original text")).toBeVisible();
 });
 
 test("close drawer with X button", async ({ page }) => {
   await page.locator(CITATION_CHIP).first().click();
-  await expect(page.locator(CITATION_DRAWER)).toBeVisible();
+  const drawer = page.locator(CITATION_DRAWER);
+  await expect(drawer).toBeVisible();
 
-  await page.locator(DRAWER_CLOSE).click();
-  await expect(page.locator(CITATION_DRAWER)).not.toBeVisible();
+  await drawer.locator('button[aria-label="Close source view"]').click();
+  await expect(drawer).not.toBeVisible();
 });
 
 test("close drawer by clicking backdrop", async ({ page }) => {
@@ -73,7 +72,7 @@ test("drawer shows PDF download link when source_url present", async ({ page }) 
   await expect(drawer).toBeVisible();
 
   // If source_url is populated, the download button appears
-  const downloadLink = drawer.locator("text=PDF herunterladen");
+  const downloadLink = drawer.locator("text=Download PDF");
   // Not all chunks have source_url; only assert if visible
   const isVisible = await downloadLink.isVisible();
   if (isVisible) {

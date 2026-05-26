@@ -20,7 +20,7 @@ STREAM_TIMEOUT_SECONDS = 120
 async def chat(request: Request, body: ChatRequest):
     """Stream a RAG-augmented chat response via Server-Sent Events."""
     if len(body.message) > MAX_MESSAGE_LENGTH:
-        raise HTTPException(status_code=400, detail=f"Nachricht zu lang (max {MAX_MESSAGE_LENGTH} Zeichen)")
+        raise HTTPException(status_code=400, detail=f"Message too long (max {MAX_MESSAGE_LENGTH} characters)")
     if len(body.history) > MAX_HISTORY_LENGTH:
         body.history = body.history[-MAX_HISTORY_LENGTH:]
 
@@ -32,11 +32,11 @@ async def chat(request: Request, body: ChatRequest):
                         return
                     yield event
         except TimeoutError:
-            yield {"event": "error", "data": json.dumps({"message": "Die Anfrage hat zu lange gedauert. Bitte versuche es erneut."}, ensure_ascii=False)}
+            yield {"event": "error", "data": json.dumps({"message": "The request took too long. Please try again."}, ensure_ascii=False)}
         except Exception as exc:
             import logging
             logging.getLogger(__name__).exception("SSE stream error")
-            yield {"event": "error", "data": json.dumps({"message": f"Fehler: {type(exc).__name__}: {exc}"}, ensure_ascii=False)}
+            yield {"event": "error", "data": json.dumps({"message": f"Error: {type(exc).__name__}: {exc}"}, ensure_ascii=False)}
 
     return EventSourceResponse(
         event_generator(),

@@ -16,17 +16,17 @@ export default function Error({
   return (
     <div className="flex h-full items-center justify-center">
       <div className="text-center px-4">
-        <h2 className="text-lg font-semibold text-gray-900">
-          Etwas ist schiefgelaufen
+        <h2 className="text-lg font-semibold text-text-primary">
+          Something went wrong
         </h2>
-        <p className="mt-2 text-sm text-gray-500">
-          Bitte lade die Seite neu oder versuche es erneut.
+        <p className="mt-2 text-sm text-text-muted">
+          Please reload the page or try again.
         </p>
         <button
           onClick={reset}
           className="mt-4 rounded-lg bg-green-700 px-4 py-2 text-sm text-white hover:bg-green-800 transition-colors"
         >
-          Erneut versuchen
+          Try again
         </button>
       </div>
     </div>

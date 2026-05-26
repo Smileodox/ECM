@@ -16,7 +16,8 @@ export function CitationChip({ citation, onClick }: CitationChipProps) {
     <button
       onClick={() => onClick(citation)}
       className="inline-flex items-center gap-1 rounded-full bg-lmu-green-50 border border-lmu-green-200 px-2.5 py-0.5 text-xs font-medium text-lmu-green hover:bg-lmu-green-100 hover:shadow-sm hover:scale-105 active:scale-100 transition-all duration-150 cursor-pointer align-baseline animate-chip-highlight"
-      title={`${citation.section_id} ${citation.section_title}${citation.page_number > 0 ? `, S. ${citation.page_number}` : ""}`}
+      aria-label={`View source: ${citation.section_id} ${citation.section_title}`}
+      title={`${citation.section_id} ${citation.section_title}${citation.page_number > 0 ? `, p. ${citation.page_number}` : ""}`}
     >
       <svg
         className="h-3.5 w-3.5"

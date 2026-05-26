@@ -328,9 +328,9 @@ _DOMAIN_CLASSIFIER_SYSTEM = (
 )
 
 _OFF_TOPIC_RESPONSE = (
-    "Ich bin der campusLMU Studienassistent und beantworte ausschließlich Fragen zu "
-    "Prüfungs- und Studienordnungen, Eignungssatzungen und Zulassungsordnungen. "
-    "Für andere Anliegen wende dich bitte an die zuständige Stelle der LMU."
+    "I am the campusLMU Study Assistant and can only answer questions about "
+    "study and exam regulations (PSTO), eligibility requirements, and admission rules. "
+    "For other inquiries, please contact the relevant LMU office."
 )
 
 
@@ -561,11 +561,11 @@ async def chat_stream(
         logger.exception("Error during chat streaming")
         from openai import RateLimitError, APIConnectionError, APITimeoutError
         if isinstance(e, RateLimitError):
-            user_msg = "Der Dienst ist momentan überlastet. Bitte versuche es in wenigen Sekunden erneut."
+            user_msg = "The service is currently overloaded. Please try again in a few seconds."
         elif isinstance(e, (APIConnectionError, APITimeoutError)):
-            user_msg = "Der Server ist momentan nicht erreichbar. Bitte versuche es in wenigen Sekunden erneut."
+            user_msg = "The server is currently unavailable. Please try again in a few seconds."
         else:
-            user_msg = "Bei der Verarbeitung deiner Anfrage ist ein Fehler aufgetreten. Bitte versuche es erneut."
+            user_msg = "An error occurred while processing your request. Please try again."
         yield _sse("error", {"message": user_msg})
         return
 
