@@ -77,23 +77,56 @@ _LANG_EN = (
     "Verwende auch bei englischen Antworten immer das Format [Quelle N]."
 )
 
-_ENGLISH_STRUCTURE_WORDS = frozenset(
-    "i you he she we they my your how what where when why which who whom "
-    "do does did can could would should will shall may might must "
-    "the a an is are was were am been being have has had "
-    "not no into about for with from this that these those "
-    "need want get got also but and or if then than".split()
-)
+from functools import lru_cache as _lru_cache
+
+from lingua import Language, LanguageDetectorBuilder
 
 
-def _detect_response_language(text: str) -> str:
-    words = re.findall(r"[a-zäöüß]+", text.lower())
+@_lru_cache(maxsize=1)
+def _get_language_detector():
+    return (
+        LanguageDetectorBuilder.from_languages(Language.GERMAN, Language.ENGLISH)
+        .with_minimum_relative_distance(0.15)
+        .build()
+    )
+
+
+_SHORT_MESSAGE_THRESHOLD = 5
+
+
+def _detect_response_language(text: str, history: list | None = None) -> str:
+    words = re.findall(r"[a-zäöüßA-ZÄÖÜẞ]+", text)
     if not words:
-        return "de"
-    english_hits = sum(1 for w in words if w in _ENGLISH_STRUCTURE_WORDS)
-    if english_hits >= 2 and english_hits / len(words) >= 0.3:
+        return _language_from_history(history) or "de"
+
+    if len(words) < _SHORT_MESSAGE_THRESHOLD and history:
+        lang = _language_from_history(history)
+        if lang:
+            return lang
+
+    detected = _get_language_detector().detect_language_of(text)
+    if detected == Language.ENGLISH:
         return "en"
-    return "de"
+    if detected == Language.GERMAN:
+        return "de"
+    return _language_from_history(history) or "de"
+
+
+def _language_from_history(history: list | None) -> str | None:
+    if not history:
+        return None
+    for msg in reversed(history):
+        if msg.role != "user":
+            continue
+        words = re.findall(r"[a-zäöüßA-ZÄÖÜẞ]+", msg.content)
+        if len(words) < _SHORT_MESSAGE_THRESHOLD:
+            continue
+        detected = _get_language_detector().detect_language_of(msg.content)
+        if detected == Language.ENGLISH:
+            return "en"
+        if detected == Language.GERMAN:
+            return "de"
+    return None
 
 
 SYSTEM_PROMPT = _SYSTEM_PROMPT_BASE.format(
@@ -101,12 +134,12 @@ SYSTEM_PROMPT = _SYSTEM_PROMPT_BASE.format(
 )
 
 
-def build_system_prompt(query: str = "") -> str:
+def build_system_prompt(query: str = "", history: list | None = None) -> str:
     """Build system prompt with dynamic few-shot examples and language detection."""
     from app.chat.few_shot import format_few_shot_block, get_few_shot_examples
     examples = get_few_shot_examples(query, max_examples=2)
     block = format_few_shot_block(examples)
-    lang = _detect_response_language(query)
+    lang = _detect_response_language(query, history)
     instruction = _LANG_EN if lang == "en" else _LANG_DE
     return _SYSTEM_PROMPT_BASE.format(
         language_instruction=instruction, few_shot_examples=block

@@ -514,7 +514,7 @@ async def chat_stream(
     user_prompt = build_user_prompt(context, search_query)
 
     # 5. Build messages array with token-aware history trimming
-    system_prompt = build_system_prompt(message)
+    system_prompt = build_system_prompt(message, history)
     system_tokens = _count_tokens(system_prompt)
     context_tokens = _count_tokens(user_prompt)
     trimmed_history = _trim_history(history, system_tokens, context_tokens)

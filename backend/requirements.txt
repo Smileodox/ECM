@@ -14,3 +14,6 @@ httpx>=0.28
 tenacity>=9.0
 slowapi>=0.1.9
 aiohttp>=3.9
+python-json-logger>=3.2
+redis[hiredis]>=5.2
+lingua-language-detector>=2.2
