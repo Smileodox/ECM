@@ -38,7 +38,7 @@ Bevor du antwortest, gehe diese Schritte durch:
 
 2. **Quellenangaben.** Zitiere jede Aussage mit der jeweiligen Quelle im Format [Quelle N]. Setze die Quellenverweise direkt hinter den relevanten Satz oder Absatz. Nenne wenn möglich den konkreten Paragraphen (z.B. "gemäß § 14 Abs. 3 [Quelle 2]").
 
-3. **Sprache.** Antworte auf Deutsch, es sei denn, die Frage wird auf Englisch gestellt – dann antworte auf Englisch. Bei englischen Antworten: ergänze deutsche Fachbegriffe in Klammern (z.B. "master thesis (Masterarbeit)"). Verwende auch bei englischen Antworten immer das Format [Quelle N].
+3. **Sprache.** {language_instruction}
 
 4. **Stil.** Antworte klar, präzise und studierendenfreundlich. Verwende bei juristischen Fachbegriffen eine kurze Erklärung in Klammern, wenn es dem Verständnis dient. Vermeide unnötigen Juristenjargon.
 
@@ -64,15 +64,49 @@ Bevor du antwortest, gehe diese Schritte durch:
 
 {few_shot_examples}"""
 
-SYSTEM_PROMPT = _SYSTEM_PROMPT_BASE.format(few_shot_examples="")
+_LANG_DE = (
+    "Antworte auf Deutsch. Verwende das Format [Quelle N] für Quellenverweise."
+)
+_LANG_EN = (
+    "Antworte auf Englisch. Ergänze deutsche Fachbegriffe in Klammern "
+    '(z.B. "master thesis (Masterarbeit)"). '
+    "Verwende auch bei englischen Antworten immer das Format [Quelle N]."
+)
+
+_ENGLISH_STRUCTURE_WORDS = frozenset(
+    "i you he she we they my your how what where when why which who whom "
+    "do does did can could would should will shall may might must "
+    "the a an is are was were am been being have has had "
+    "not no into about for with from this that these those "
+    "need want get got also but and or if then than".split()
+)
+
+
+def _detect_response_language(text: str) -> str:
+    words = re.findall(r"[a-zäöüß]+", text.lower())
+    if not words:
+        return "de"
+    english_hits = sum(1 for w in words if w in _ENGLISH_STRUCTURE_WORDS)
+    if english_hits >= 2 and english_hits / len(words) >= 0.3:
+        return "en"
+    return "de"
+
+
+SYSTEM_PROMPT = _SYSTEM_PROMPT_BASE.format(
+    language_instruction=_LANG_DE, few_shot_examples=""
+)
 
 
 def build_system_prompt(query: str = "") -> str:
-    """Build system prompt with dynamic few-shot examples based on query type."""
+    """Build system prompt with dynamic few-shot examples and language detection."""
     from app.chat.few_shot import format_few_shot_block, get_few_shot_examples
     examples = get_few_shot_examples(query, max_examples=2)
     block = format_few_shot_block(examples)
-    return _SYSTEM_PROMPT_BASE.format(few_shot_examples=block)
+    lang = _detect_response_language(query)
+    instruction = _LANG_EN if lang == "en" else _LANG_DE
+    return _SYSTEM_PROMPT_BASE.format(
+        language_instruction=instruction, few_shot_examples=block
+    )
 
 
 def _extract_year(doc_filename: str) -> int | None:

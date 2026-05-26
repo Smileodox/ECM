@@ -33,6 +33,10 @@ async def chat(request: Request, body: ChatRequest):
                     yield event
         except TimeoutError:
             yield {"event": "error", "data": json.dumps({"message": "Die Anfrage hat zu lange gedauert. Bitte versuche es erneut."}, ensure_ascii=False)}
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).exception("SSE stream error")
+            yield {"event": "error", "data": json.dumps({"message": f"Fehler: {type(exc).__name__}: {exc}"}, ensure_ascii=False)}
 
     return EventSourceResponse(
         event_generator(),
