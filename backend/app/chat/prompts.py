@@ -90,8 +90,16 @@ def _get_language_detector():
         .build()
     )
 
-
 _SHORT_MESSAGE_THRESHOLD = 5
+
+
+def _detect_lang(text: str) -> str | None:
+    detected = _get_language_detector().detect_language_of(text)
+    if detected == Language.ENGLISH:
+        return "en"
+    if detected == Language.GERMAN:
+        return "de"
+    return None
 
 
 def _detect_response_language(text: str, history: list | None = None) -> str:
@@ -104,12 +112,7 @@ def _detect_response_language(text: str, history: list | None = None) -> str:
         if lang:
             return lang
 
-    detected = _get_language_detector().detect_language_of(text)
-    if detected == Language.ENGLISH:
-        return "en"
-    if detected == Language.GERMAN:
-        return "de"
-    return _language_from_history(history) or "de"
+    return _detect_lang(text) or _language_from_history(history) or "de"
 
 
 def _language_from_history(history: list | None) -> str | None:
@@ -121,11 +124,9 @@ def _language_from_history(history: list | None) -> str | None:
         words = re.findall(r"[a-zäöüßA-ZÄÖÜẞ]+", msg.content)
         if len(words) < _SHORT_MESSAGE_THRESHOLD:
             continue
-        detected = _get_language_detector().detect_language_of(msg.content)
-        if detected == Language.ENGLISH:
-            return "en"
-        if detected == Language.GERMAN:
-            return "de"
+        lang = _detect_lang(msg.content)
+        if lang:
+            return lang
     return None
 
 
