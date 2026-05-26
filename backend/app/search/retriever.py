@@ -93,6 +93,7 @@ _SELECT_FIELDS = [
     "id", "content", "doc_name", "doc_filename", "source_url",
     "section_id", "section_title", "absatz", "page_number",
     "part", "sub_part", "doc_type", "program_name", "chunk_index",
+    "amendment_context",
 ]
 
 
@@ -195,13 +196,13 @@ async def _translate_to_german(query: str) -> str:
         terms = ", ".join(f'"{k}" → "{v}"' for k, v in glossary_matches.items())
         system_prompt += f" Use these domain-specific translations: {terms}"
     response = await client.chat.completions.create(
-        model=settings.azure_openai_deployment,
+        model=settings.azure_openai_mini_deployment,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": query},
         ],
         temperature=0,
-        max_tokens=200,
+        max_completion_tokens=200,
     )
     translated = response.choices[0].message.content.strip()
     logger.info("Translated query: '%s' → '%s'", query[:60], translated[:60])
@@ -216,7 +217,7 @@ async def _generate_hyde(query: str) -> str:
     client = _get_openai_client()
     try:
         response = await client.chat.completions.create(
-            model=settings.azure_openai_deployment,
+            model=settings.azure_openai_mini_deployment,
             messages=[
                 {"role": "system", "content": (
                     "Du bist ein Experte für deutsche Hochschulrechtsdokumente. "
@@ -227,7 +228,7 @@ async def _generate_hyde(query: str) -> str:
                 {"role": "user", "content": query},
             ],
             temperature=0.3,
-            max_tokens=300,
+            max_completion_tokens=300,
         )
     except Exception as e:
         logger.warning("HyDE generation failed (%s), falling back to original query", e)
@@ -252,7 +253,7 @@ async def _generate_expansions(query: str) -> list[str]:
     client = _get_openai_client()
     try:
         response = await client.chat.completions.create(
-            model=settings.azure_openai_deployment,
+            model=settings.azure_openai_mini_deployment,
             messages=[
                 {"role": "system", "content": (
                     "Schreibe genau 2 alternative Umformulierungen der folgenden Suchanfrage. "
@@ -263,7 +264,7 @@ async def _generate_expansions(query: str) -> list[str]:
                 {"role": "user", "content": query},
             ],
             temperature=0.3,
-            max_tokens=150,
+            max_completion_tokens=150,
         )
     except Exception as e:
         logger.warning("Query expansion failed (%s), skipping", e)
@@ -306,10 +307,10 @@ def _filter_superseded(citations: list[Citation]) -> list[Citation]:
 
 
 def _prefer_amendment_sections(citations: list[Citation]) -> list[Citation]:
-    """When both PSTO §X Abs. Y and Änderung §X Abs. Y exist for the same program, prefer the Änderung.
+    """When both a base doc (PSTO/Eignung/Zulassung) and Änderung exist for the same program+section, prefer the Änderung.
 
-    Only removes PSTO chunks where the Änderung covers the same section AND absatz.
-    PSTO chunks with absätze not covered by the amendment are kept.
+    Only removes base-doc chunks where the Änderung covers the same section AND absatz.
+    Base-doc chunks with absätze not covered by the amendment are kept.
     """
     from collections import defaultdict
     amendment_keys: set[tuple[str, str, str | None]] = set()
@@ -320,9 +321,10 @@ def _prefer_amendment_sections(citations: list[Citation]) -> list[Citation]:
     if not amendment_keys:
         return citations
 
+    _BASE_DOC_TYPES = {"psto", "eignung", "zulassung"}
     to_remove: set[int] = set()
     for c in citations:
-        if c.doc_type != "psto" or not c.section_id:
+        if c.doc_type not in _BASE_DOC_TYPES or not c.section_id:
             continue
         key_exact = (c.program_name, c.section_id, c.absatz)
         key_section = (c.program_name, c.section_id, None)
@@ -331,7 +333,7 @@ def _prefer_amendment_sections(citations: list[Citation]) -> list[Citation]:
 
     if to_remove:
         result = [c for c in citations if id(c) not in to_remove]
-        logger.info("Amendment preference: %d PSTO chunks superseded by amendments", len(to_remove))
+        logger.info("Amendment preference: %d base-doc chunks superseded by amendments", len(to_remove))
         return result
     return citations
 
@@ -395,16 +397,44 @@ def _enforce_diversity(citations: list[Citation]) -> list[Citation]:
     return diverse
 
 
+_TITLE_SYNONYMS: dict[str, list[str]] = {
+    "prüfungsformen": ["prüfung", "prüfungen", "art der prüfung"],
+    "prüfungsform": ["prüfung", "prüfungen", "art der prüfung"],
+    "klausur": ["prüfung", "schriftlich"],
+    "mündlich": ["prüfung", "mündliche"],
+    "masterarbeit": ["masterarbeit", "abschlussarbeit", "thesis"],
+    "bachelorarbeit": ["bachelorarbeit", "abschlussarbeit"],
+    "wiederholung": ["wiederholung", "wiederholen", "nicht bestanden"],
+    "regelstudienzeit": ["regelstudienzeit", "studienzeit", "studiendauer"],
+    "pflichtmodule": ["pflicht", "modul", "pflichtbereich"],
+    "wahlpflicht": ["wahlpflicht", "wahlbereich", "wahl"],
+    "anrechnung": ["anrechnung", "anerkennung"],
+    "zulassung": ["zulassung", "zugang", "eignung"],
+    "note": ["note", "noten", "berechnung", "bewertung"],
+    "ects": ["ects", "leistungspunkt", "kreditpunkt"],
+}
+
+
 def _boost_title_matches(query: str, scored: list[tuple[float, dict]]) -> list[tuple[float, dict]]:
-    """Boost RRF scores for results whose section_title contains significant query keywords."""
+    """Boost RRF scores for results whose section_title matches query keywords (exact, substring, or synonym)."""
     keywords = {w.lower() for w in query.split() if len(w) >= 4}
     if not keywords:
         return scored
+
+    expanded_keywords = set(keywords)
+    for kw in keywords:
+        for syn_key, syn_values in _TITLE_SYNONYMS.items():
+            if kw.startswith(syn_key) or syn_key.startswith(kw):
+                expanded_keywords.update(syn_values)
+
     boosted: list[tuple[float, dict]] = []
     for score, doc in scored:
         title = (doc.get("section_title") or "").lower()
-        title_words = set(title.split())
-        if keywords & title_words:
+        if not title:
+            boosted.append((score, doc))
+            continue
+        matched = any(kw in title or title in kw for kw in expanded_keywords)
+        if matched:
             boosted.append((score + 0.3, doc))
         else:
             boosted.append((score, doc))
@@ -433,7 +463,39 @@ async def _search_with_vector(
     filter_expr: str | None,
     top_k: int,
 ) -> list[tuple[float, dict]]:
-    """Run hybrid search with vector query + semantic reranker."""
+    """Run hybrid search with vector query + semantic reranker (falls back to plain hybrid if reranker unavailable)."""
+    client = _get_search_client()
+    try:
+        results = await client.search(
+            search_text=search_query,
+            vector_queries=[
+                VectorizedQuery(vector=query_vector, k_nearest_neighbors=top_k, fields="content_vector"),
+            ],
+            filter=filter_expr,
+            query_type="semantic",
+            semantic_configuration_name="default",
+            top=top_k,
+            select=_SELECT_FIELDS,
+        )
+        scored: list[tuple[float, dict]] = []
+        async for result in results:
+            score = result.get("@search.reranker_score") or 0.0
+            scored.append((score, dict(result)))
+        return scored
+    except Exception as e:
+        if "402" in str(e) or "semantic" in str(e).lower():
+            logger.warning("Semantic reranker unavailable, falling back to plain hybrid search")
+            return await _search_with_vector_no_reranker(search_query, query_vector, filter_expr, top_k)
+        raise
+
+
+async def _search_with_vector_no_reranker(
+    search_query: str,
+    query_vector: list[float],
+    filter_expr: str | None,
+    top_k: int,
+) -> list[tuple[float, dict]]:
+    """Hybrid search without semantic reranker — uses search score as fallback."""
     client = _get_search_client()
     results = await client.search(
         search_text=search_query,
@@ -441,14 +503,12 @@ async def _search_with_vector(
             VectorizedQuery(vector=query_vector, k_nearest_neighbors=top_k, fields="content_vector"),
         ],
         filter=filter_expr,
-        query_type="semantic",
-        semantic_configuration_name="default",
         top=top_k,
         select=_SELECT_FIELDS,
     )
     scored: list[tuple[float, dict]] = []
     async for result in results:
-        score = result.get("@search.reranker_score") or 0.0
+        score = result.get("@search.score") or 0.0
         scored.append((score, dict(result)))
     return scored
 
@@ -458,21 +518,37 @@ async def _search_bm25_only(
     filter_expr: str | None,
     top_k: int,
 ) -> list[tuple[float, dict]]:
-    """Run BM25-only search with semantic reranker (no vector)."""
+    """Run BM25-only search with semantic reranker (falls back to plain BM25 if reranker unavailable)."""
     client = _get_search_client()
-    results = await client.search(
-        search_text=search_query,
-        filter=filter_expr,
-        query_type="semantic",
-        semantic_configuration_name="default",
-        top=top_k,
-        select=_SELECT_FIELDS,
-    )
-    scored: list[tuple[float, dict]] = []
-    async for result in results:
-        score = result.get("@search.reranker_score") or 0.0
-        scored.append((score, dict(result)))
-    return scored
+    try:
+        results = await client.search(
+            search_text=search_query,
+            filter=filter_expr,
+            query_type="semantic",
+            semantic_configuration_name="default",
+            top=top_k,
+            select=_SELECT_FIELDS,
+        )
+        scored: list[tuple[float, dict]] = []
+        async for result in results:
+            score = result.get("@search.reranker_score") or 0.0
+            scored.append((score, dict(result)))
+        return scored
+    except Exception as e:
+        if "402" in str(e) or "semantic" in str(e).lower():
+            logger.warning("Semantic reranker unavailable for BM25, falling back to plain BM25")
+            results = await client.search(
+                search_text=search_query,
+                filter=filter_expr,
+                top=top_k,
+                select=_SELECT_FIELDS,
+            )
+            scored = []
+            async for result in results:
+                score = result.get("@search.score") or 0.0
+                scored.append((score, dict(result)))
+            return scored
+        raise
 
 
 async def _fetch_neighbor_chunks(citations: list[Citation]) -> list[Citation]:
@@ -653,6 +729,7 @@ async def retrieve(
             content=result.get("content", ""),
             doc_type=result.get("doc_type", ""),
             reranker_score=_score,
+            amendment_context=result.get("amendment_context") or "",
         )
         c.chunk_index = result.get("chunk_index")
         raw_citations.append(c)

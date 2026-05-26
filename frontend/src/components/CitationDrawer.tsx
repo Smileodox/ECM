@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
 import type { Citation } from "@/types/chat";
 
 interface CitationDrawerProps {
@@ -10,6 +11,7 @@ interface CitationDrawerProps {
 
 export function CitationDrawer({ citation, onClose }: CitationDrawerProps) {
   const isOpen = citation !== null;
+  const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -17,6 +19,7 @@ export function CitationDrawer({ citation, onClose }: CitationDrawerProps) {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", handleKeyDown);
+    closeRef.current?.focus();
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
@@ -32,10 +35,14 @@ export function CitationDrawer({ citation, onClose }: CitationDrawerProps) {
       <div
         className={`fixed inset-0 bg-black/20 z-40 transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}
         onClick={onClose}
+        aria-hidden="true"
       />
       {/* Drawer */}
       <div
-        className={`fixed right-0 top-0 h-full w-full max-w-lg bg-white z-50 flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "translate-x-full"}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={citation ? `Quelle ${citation.index}: ${location}` : "Quellendetails"}
+        className={`fixed right-0 top-0 h-full w-full max-w-lg bg-surface z-50 flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "translate-x-full"}`}
         style={{ boxShadow: isOpen ? "var(--drawer-shadow)" : "none" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -43,16 +50,18 @@ export function CitationDrawer({ citation, onClose }: CitationDrawerProps) {
         <div className="h-1 bg-gradient-to-r from-lmu-green to-lmu-green-light shrink-0" />
 
         {/* Header */}
-        <div className="flex items-center justify-between border-b px-6 py-4">
+        <div className="flex items-center justify-between border-b border-border-default px-6 py-4">
           <div>
-            <h3 className="text-base font-semibold text-gray-900">
+            <h3 className="text-base font-semibold text-text-primary">
               Quelle {citation?.index}
             </h3>
-            <p className="text-sm text-gray-500 mt-0.5">{location}</p>
+            <p className="text-sm text-text-muted mt-0.5">{location}</p>
           </div>
           <button
+            ref={closeRef}
             onClick={onClose}
-            className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-150"
+            aria-label="Quellenansicht schließen"
+            className="rounded-lg p-1.5 text-text-muted hover:text-text-secondary hover:bg-surface-secondary transition-all duration-150"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -62,25 +71,25 @@ export function CitationDrawer({ citation, onClose }: CitationDrawerProps) {
 
         {/* Metadata */}
         {citation && (
-          <div className="border-b px-6 py-3 bg-lmu-green-50/50">
-            <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+          <div className="border-b border-border-default px-6 py-3 bg-lmu-green-50/50">
+            <div className="grid grid-cols-2 gap-2 text-xs text-text-secondary">
               <div>
-                <span className="font-semibold text-gray-500">Dokument:</span>{" "}
+                <span className="font-semibold text-text-muted">Dokument:</span>{" "}
                 {citation.doc_name}
               </div>
               {citation.page_number > 0 && (
                 <div>
-                  <span className="font-semibold text-gray-500">Seite:</span>{" "}
+                  <span className="font-semibold text-text-muted">Seite:</span>{" "}
                   {citation.page_number}
                 </div>
               )}
               <div>
-                <span className="font-semibold text-gray-500">Paragraph:</span>{" "}
+                <span className="font-semibold text-text-muted">Paragraph:</span>{" "}
                 {citation.section_id} {citation.section_title}
               </div>
               {citation.absatz && (
                 <div>
-                  <span className="font-semibold text-gray-500">Absatz:</span>{" "}
+                  <span className="font-semibold text-text-muted">Absatz:</span>{" "}
                   {citation.absatz}
                 </div>
               )}
@@ -90,6 +99,7 @@ export function CitationDrawer({ citation, onClose }: CitationDrawerProps) {
                 href={citation.source_url}
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-label={`PDF von ${citation.doc_name} herunterladen`}
                 className="mt-3 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-lmu-green to-lmu-green-light px-4 py-2 text-sm font-medium text-white shadow-sm hover:shadow-md hover:from-lmu-green-dark hover:to-lmu-green transition-all duration-200"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -107,8 +117,21 @@ export function CitationDrawer({ citation, onClose }: CitationDrawerProps) {
             <p className="text-xs font-medium text-lmu-green uppercase tracking-wide mb-3">
               Originaltext
             </p>
-            <div className="rounded-xl border border-lmu-green-100 bg-lmu-green-50/30 p-4 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-              {citation.content}
+            <div className="rounded-xl border border-lmu-green-100 bg-lmu-green-50/30 p-4 text-sm text-text-secondary leading-relaxed citation-markdown">
+              <ReactMarkdown
+                components={{
+                  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                  strong: ({ children }) => <strong className="font-semibold text-text-primary">{children}</strong>,
+                  h1: ({ children }) => <h3 className="font-semibold text-text-primary mt-3 mb-1 text-base">{children}</h3>,
+                  h2: ({ children }) => <h3 className="font-semibold text-text-primary mt-3 mb-1">{children}</h3>,
+                  h3: ({ children }) => <h4 className="font-semibold text-text-primary mt-2 mb-1">{children}</h4>,
+                  ul: ({ children }) => <ul className="list-disc pl-4 mb-2">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal pl-4 mb-2">{children}</ol>,
+                  li: ({ children }) => <li className="mb-0.5">{children}</li>,
+                }}
+              >
+                {citation.content}
+              </ReactMarkdown>
             </div>
           </div>
         )}

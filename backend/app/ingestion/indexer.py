@@ -127,6 +127,11 @@ def create_or_update_index() -> None:
                 name="chunk_index",
                 type=SearchFieldDataType.Int32,
                 sortable=True,
+                filterable=True,
+            ),
+            SimpleField(
+                name="amendment_context",
+                type=SearchFieldDataType.String,
             ),
             SimpleField(
                 name="doc_type",
@@ -242,6 +247,7 @@ def upload_chunks(chunks: list[Chunk], embeddings: list[list[float]]) -> int:
             "chunk_index": chunk.chunk_index,
             "doc_type": chunk.doc_type,
             "program_name": chunk.program_name,
+            "amendment_context": chunk.amendment_context,
         })
 
     # Upload in batches of 100 (Azure limit is 1000, but smaller is safer)
@@ -265,7 +271,10 @@ def upload_chunks(chunks: list[Chunk], embeddings: list[list[float]]) -> int:
 
 def ingest_chunks(chunks: list[Chunk]) -> int:
     """Full pipeline: create index, embed, upload. Returns count indexed."""
-    create_or_update_index()
+    try:
+        create_or_update_index()
+    except Exception:
+        logger.warning("Index schema update failed (may need full re-index for field changes)", exc_info=True)
     embeddings = embed_chunks(chunks)
     return upload_chunks(chunks, embeddings)
 
@@ -393,6 +402,7 @@ def embed_and_upload_incremental(
                 "chunk_index": chunk.chunk_index,
                 "doc_type": chunk.doc_type,
                 "program_name": chunk.program_name,
+                "amendment_context": chunk.amendment_context,
             })
 
         result = search_client.upload_documents(documents=documents)

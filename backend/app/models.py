@@ -28,6 +28,7 @@ class Citation(BaseModel):
     doc_type: str = ""
     reranker_score: float = 0.0
     chunk_index: int | None = None
+    amendment_context: str = ""
 
 
 class IngestResponse(BaseModel):

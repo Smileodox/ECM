@@ -107,7 +107,11 @@ def build_context(citations: list) -> str:
             doc_label = f"[{doc_type_label}] {doc_label}"
 
         header = f"[Quelle {c.index}: {location} | {doc_label}]"
-        blocks.append(f"{header}\n{c.content}")
+        amendment_ctx = getattr(c, "amendment_context", "")
+        if amendment_ctx:
+            blocks.append(f"{header}\n{amendment_ctx}\n\n{c.content}")
+        else:
+            blocks.append(f"{header}\n{c.content}")
 
     return "\n\n---\n\n".join(blocks)
 

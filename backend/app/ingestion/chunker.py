@@ -11,8 +11,14 @@ _enc = tiktoken.get_encoding("cl100k_base")
 # --- Regex patterns for PyMuPDF4LLM markdown output ---
 # Matches section headings like: ## **§ 1 Gegenstand des Studiengangs und Zweck der Masterprüfung**
 # Also handles: ## **§ 13 (nicht belegt)** and ## **§ 1** (title-less, common in Änderungssatzungen)
+# Also handles older PDFs without bold: ## § 1 followed by ## Title on next line
 SECTION_HEADING_PATTERN = re.compile(
-    r"^##\s+\*\*§\s*(\d+)\s*(.*?)\*\*\s*$", re.MULTILINE
+    r"^##\s+\*\*§\s*(\d+)\s*(.*?)\*\*\s*$"
+    r"|"
+    r"^##\s+§\s*(\d+)\s*$\n+^##\s+(.+?)\s*$"
+    r"|"
+    r"^##\s+§\s*(\d+)\s+(.+?)\s*$",
+    re.MULTILINE,
 )
 # Matches Absatz markers: "(1)", "(2)" at the start of a line
 ABSATZ_PATTERN = re.compile(r"^\((\d+)\)", re.MULTILINE)
@@ -49,6 +55,7 @@ class Chunk:
     chunk_index: int = 0
     doc_type: str = ""  # psto | eignung | zulassung | aenderung
     program_name: str = ""  # e.g. "Informatik"
+    amendment_context: str = ""  # e.g. "[Änderungssatzung: Ändert die ...]"
 
     @property
     def id(self) -> str:
@@ -89,9 +96,20 @@ def _extract_doc_name(pages: list[ParsedPage]) -> str:
             name = re.sub(r"\s+", " ", name)
             return name
 
-        # Fallback: plain text
+        # Fallback: plain text with standard naming
         match = re.search(
             r"((?:Prüfungs-?\s*und\s*)?(?:Studien|Zulassungs|Eignungs\w*)(?:ordnung|satzung).+?)(?:\n\n|Vom\s)",
+            page.text,
+            re.DOTALL,
+        )
+        if match:
+            name = match.group(1).strip()
+            name = re.sub(r"\s+", " ", name)
+            return name
+
+        # Fallback: "Satzung über das Eignungsverfahren ..." (older format)
+        match = re.search(
+            r"(Satzung\s+(?:über|zur)\s+(?:das\s+)?(?:Eignungsverfahren|Änderung).+?)(?:\n\n|Vom\s)",
             page.text,
             re.DOTALL,
         )
@@ -149,8 +167,9 @@ def _split_into_sections(full_text: str, boundaries: list[tuple[int, int]]) -> l
     # (match_start, section_num, title, heading_text, section_id)
 
     for match in SECTION_HEADING_PATTERN.finditer(full_text):
-        section_num = int(match.group(1))
-        title = match.group(2).strip()
+        # 3 alternatives: groups (1,2) = bold, (3,4) = no-bold split-line, (5,6) = no-bold single-line
+        section_num = int(match.group(1) or match.group(3) or match.group(5))
+        title = (match.group(2) or match.group(4) or match.group(6) or "").strip()
         heading = match.group(0).strip()
         section_id = f"§{section_num}"
         section_starts.append((match.start(), section_num, title, heading, section_id))
@@ -358,12 +377,11 @@ def chunk_document(
     chunk_idx = 0
 
     for section in sections:
-        section_content = (aenderung_prefix + "\n\n" + section.body) if aenderung_prefix else section.body
-        tokens = count_tokens(section_content)
+        tokens = count_tokens(section.body)
 
         if tokens <= MAX_CHUNK_TOKENS:
             chunks.append(Chunk(
-                content=section_content,
+                content=section.body,
                 doc_name=doc_name,
                 doc_filename=doc_filename,
                 section_id=section.section_id,
@@ -376,14 +394,14 @@ def chunk_document(
                 chunk_index=chunk_idx,
                 doc_type=doc_type,
                 program_name=program_name,
+                amendment_context=aenderung_prefix,
             ))
             chunk_idx += 1
         else:
             # Split by Absatz groups
             groups = _split_section_by_absatz(section)
             for text, absatz_label in groups:
-                chunk_content = (aenderung_prefix + "\n\n" + text) if aenderung_prefix else text
-                sub_chunks = _hard_split(chunk_content, MAX_CHUNK_TOKENS)
+                sub_chunks = _hard_split(text, MAX_CHUNK_TOKENS)
                 for sc in sub_chunks:
                     chunks.append(Chunk(
                         content=sc,
@@ -399,6 +417,7 @@ def chunk_document(
                         chunk_index=chunk_idx,
                         doc_type=doc_type,
                         program_name=program_name,
+                        amendment_context=aenderung_prefix,
                     ))
                     chunk_idx += 1
 
@@ -409,33 +428,41 @@ def chunk_all_documents(
     parsed_docs: dict[str, list[ParsedPage]],
     url_map: dict[str, str] | None = None,
     doc_type_map: dict[str, str] | None = None,
-    program_map: dict[str, str] | None = None,
+    program_map: dict[str, list[str]] | None = None,
     generate_summaries: bool = False,
 ) -> list[Chunk]:
-    """Chunk all parsed documents."""
+    """Chunk all parsed documents. Multi-program PDFs produce chunks for each program."""
+    import copy
     all_chunks: list[Chunk] = []
     for filename, pages in parsed_docs.items():
         source_url = (url_map or {}).get(filename, "")
         doc_type = (doc_type_map or {}).get(filename, "")
-        program_name = (program_map or {}).get(filename, "")
-        doc_chunks = chunk_document(
+        programs = (program_map or {}).get(filename, []) or [""]
+
+        base_chunks = chunk_document(
             pages, filename,
             source_url=source_url,
             doc_type=doc_type,
-            program_name=program_name,
+            program_name=programs[0],
         )
-        if generate_summaries and doc_chunks:
+        if generate_summaries and base_chunks:
             from app.ingestion.summarizer import generate_summary_chunk
             summary = generate_summary_chunk(
                 pages,
                 doc_filename=filename,
-                doc_name=doc_chunks[0].doc_name,
+                doc_name=base_chunks[0].doc_name,
                 source_url=source_url,
                 doc_type=doc_type,
-                program_name=program_name,
-                chunk_index=len(doc_chunks),
+                program_name=programs[0],
+                chunk_index=len(base_chunks),
             )
             if summary:
-                doc_chunks.append(summary)
-        all_chunks.extend(doc_chunks)
+                base_chunks.append(summary)
+        all_chunks.extend(base_chunks)
+
+        for extra_program in programs[1:]:
+            for chunk in base_chunks:
+                dup = copy.copy(chunk)
+                dup.program_name = extra_program
+                all_chunks.append(dup)
     return all_chunks

@@ -10,7 +10,7 @@ import httpx
 import tiktoken
 from openai import AsyncAzureOpenAI
 
-from app.chat.citations import extract_used_citation_indices, normalize_citation_markers
+from app.chat.citations import extract_used_citation_indices, normalize_citation_markers, strip_for_display
 from app.chat.few_shot import classify_query
 from app.chat.prompts import NO_INFO_FALLBACK, build_context, build_system_prompt, build_user_prompt
 from app.config import settings
@@ -207,6 +207,7 @@ _EN_PROGRAM_MAP = {
     "management": "Management",
     "management and digital technologies": "Management and Digital Technologies",
     "mdt": "Management and Digital Technologies",
+    "mmt": "Management and Digital Technologies",
     "european triple degree": "Master of Science in Management - European Triple Degree",
     "international triple degree": "Master of Science in Management – International Triple Degree",
     "finance": "Finance",
@@ -288,18 +289,20 @@ async def _llm_resolve_program(message: str, history: list[ChatMessage]) -> str 
     client = _get_openai_client()
     try:
         response = await client.chat.completions.create(
-            model=settings.azure_openai_deployment,
+            model=settings.azure_openai_mini_deployment,
             messages=[
                 {"role": "system", "content": (
                     "Given a conversation about university programs at LMU Munich, identify which specific program the user is asking about. "
-                    "Match abbreviations, informal names, and partial names to the correct official program name.\n\n"
+                    "Match abbreviations, informal names, and partial names to the correct official program name.\n"
+                    "IMPORTANT: Match the MOST SPECIFIC program name. Do NOT confuse similar-sounding programs. "
+                    "For example, 'Management and Digital Technologies' is NOT the same as 'Umweltsysteme und Nachhaltigkeit'.\n\n"
                     f"Available programs:\n{programs_text}\n\n"
                     "Reply with ONLY the exact program name from the list, or NONE if no specific program is mentioned or identifiable."
                 )},
                 {"role": "user", "content": conversation},
             ],
             temperature=0,
-            max_tokens=100,
+            max_completion_tokens=100,
         )
         result = response.choices[0].message.content.strip()
         if result == "NONE" or not result:
@@ -331,18 +334,31 @@ _OFF_TOPIC_RESPONSE = (
 )
 
 
+_IN_DOMAIN_KEYWORDS = re.compile(
+    r"(?:prüfung|studien|ects|modul|semester|masterarbeit|bachelorarbeit|"
+    r"regelstudienzeit|eignung|zulassung|änderung|anrechnung|immatrikulation|"
+    r"wiederholung|klausur|pflicht|wahlpflicht|thesis|exam|credit|admission|"
+    r"eligibility|enrollment|psto|studienordnung|prüfungsordnung|satzung|"
+    r"studiengang|abschluss|diplom|bachelor|master|§\s*\d)",
+    re.IGNORECASE,
+)
+
+
 async def _is_in_domain(query: str) -> bool:
     """Return True if query is about university regulations; fail-open on error."""
+    if _IN_DOMAIN_KEYWORDS.search(query):
+        return True
+
     client = _get_openai_client()
     try:
         response = await client.chat.completions.create(
-            model=settings.azure_openai_deployment,
+            model=settings.azure_openai_mini_deployment,
             messages=[
                 {"role": "system", "content": _DOMAIN_CLASSIFIER_SYSTEM},
                 {"role": "user", "content": query},
             ],
             temperature=0,
-            max_tokens=5,
+            max_completion_tokens=5,
         )
         answer = response.choices[0].message.content.strip().upper()
         in_domain = not answer.startswith("NO")
@@ -368,13 +384,13 @@ async def _rewrite_query(message: str, history: list[ChatMessage]) -> str:
     history_text = "\n".join(parts)
     try:
         response = await client.chat.completions.create(
-            model=settings.azure_openai_deployment,
+            model=settings.azure_openai_mini_deployment,
             messages=[
                 {"role": "system", "content": "Rewrite the user's follow-up question as a standalone question that includes all necessary context from the conversation history. Only output the rewritten question, nothing else. If the question is already standalone, return it unchanged. Keep the same language as the original question. Preserve all legal references exactly as written (e.g., §14 Abs. 3, Ziff. 2, Nr. 1). Preserve program names (Studiengangbezeichnungen) exactly."},
                 {"role": "user", "content": f"Conversation:\n{history_text}\n\nFollow-up: {message}"},
             ],
             temperature=0,
-            max_tokens=200,
+            max_completion_tokens=200,
         )
         rewritten = response.choices[0].message.content.strip()
         logger.debug("Query rewrite: '%s' → '%s'", message[:60], rewritten[:60])
@@ -443,6 +459,8 @@ async def chat_stream(
     search_query = results_map.get("rewrite", message)
     if need_program and not program_was_provided:
         program_name = results_map.get("program")
+    if program_name:
+        in_domain = True
     timing["rewrite_ms"] = round((time.perf_counter() - t0) * 1000, 1)
 
     if not in_domain:
@@ -529,7 +547,7 @@ async def chat_stream(
             model=settings.azure_openai_deployment,
             messages=messages,
             temperature=0.1,
-            max_tokens=2000,
+            max_completion_tokens=2000,
             stream=True,
         )
 
@@ -563,7 +581,7 @@ async def chat_stream(
             "page_number": c.page_number,
             "doc_name": c.doc_name,
             "source_url": c.source_url,
-            "content": c.content,
+            "content": strip_for_display(c.content),
             "doc_type": c.doc_type,
         }
         for c in citations

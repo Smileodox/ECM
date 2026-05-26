@@ -2,6 +2,13 @@ import re
 
 from app.models import Citation
 
+_AMENDMENT_PREFIX_RE = re.compile(r"\[Änderungssatzung:[^\]]*\]\s*")
+_SECTION_HEADING_RE = re.compile(
+    r"^##\s+(?:\*\*)?§\s*\d+[^\n]*(?:\*\*)?\s*\n*",
+    re.MULTILINE,
+)
+_ELLIPSIS_MARKER_RE = re.compile(r"\[\.{3}\]\s*")
+
 # Matches any [...] block containing at least one "Quelle N" or "source N"
 _CITATION_BLOCK_RE = re.compile(r"\[[^\]]*(?:Quelle|[Ss]ource)\s+\d+[^\]]*\]")
 # Extracts individual citation indices from within a block
@@ -24,6 +31,15 @@ def extract_used_citation_indices(text: str) -> set[int]:
         for m in _CITE_INDEX_RE.finditer(block.group()):
             indices.add(int(m.group(1)))
     return indices
+
+
+def strip_for_display(content: str) -> str:
+    """Strip amendment prefix, section headings, and overlap markers for frontend display."""
+    content = _AMENDMENT_PREFIX_RE.sub("", content)
+    content = _ELLIPSIS_MARKER_RE.sub("", content)
+    content = _SECTION_HEADING_RE.sub("", content)
+    content = re.sub(r"\n{3,}", "\n\n", content)
+    return content.strip()
 
 
 def normalize_citation_markers(text: str) -> str:
