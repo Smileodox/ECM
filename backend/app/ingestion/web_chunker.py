@@ -11,6 +11,14 @@ from app.ingestion.chunker import Chunk, MAX_CHUNK_TOKENS, TARGET_CHUNK_TOKENS, 
 
 H2_PATTERN = re.compile(r"^##\s+(.+)$", re.MULTILINE)
 H3_PATTERN = re.compile(r"^###\s+(.+)$", re.MULTILINE)
+_ACCORDION_ANCHOR = re.compile(r"\[([^\]]*)\]\(#accordionItem[^)]*\)")
+
+
+def _clean_title(title: str) -> str:
+    """Strip accordion anchors and markdown link syntax from section titles."""
+    cleaned = _ACCORDION_ANCHOR.sub(r"\1", title)
+    cleaned = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", cleaned)
+    return cleaned.strip()
 
 
 def _split_by_heading(text: str, pattern: re.Pattern) -> list[tuple[str, str]]:
@@ -41,15 +49,23 @@ def chunk_web_page(
     page_title: str,
     source_url: str,
     topic_slug: str,
+    external_links: list[dict[str, str]] | None = None,
 ) -> list[Chunk]:
     if not content_md.strip():
         return []
+
+    if external_links:
+        links_block = "\n\n## Weiterführende Links\n\n" + "\n".join(
+            f"- [{l['label']}]({l['url']})" for l in external_links
+        )
+        content_md = content_md + links_block
 
     h2_sections = _split_by_heading(content_md, H2_PATTERN)
     chunks: list[Chunk] = []
     chunk_idx = 0
 
-    for h2_title, h2_body in h2_sections:
+    for raw_h2_title, h2_body in h2_sections:
+        h2_title = _clean_title(raw_h2_title)
         h2_tokens = count_tokens(h2_body)
 
         if h2_tokens <= MAX_CHUNK_TOKENS:
@@ -80,7 +96,8 @@ def chunk_web_page(
                 chunk_idx += 1
             continue
 
-        for h3_title, h3_body in h3_sections:
+        for raw_h3_title, h3_body in h3_sections:
+            h3_title = _clean_title(raw_h3_title)
             h3_tokens = count_tokens(h3_body)
 
             if h3_tokens <= MAX_CHUNK_TOKENS:
@@ -155,6 +172,7 @@ def chunk_all_web_pages(
             page_title=page["title"],
             source_url=page["url"],
             topic_slug=page["topic_slug"],
+            external_links=page.get("external_links"),
         )
         all_chunks.extend(chunks)
     return all_chunks

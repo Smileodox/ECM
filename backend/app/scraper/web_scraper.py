@@ -142,8 +142,34 @@ def _extract_external_links(soup: BeautifulSoup, page_url: str) -> list[dict[str
     return externals
 
 
-def _html_to_markdown(html: str) -> str:
+def _resolve_relative_links(markdown: str, base_url: str) -> str:
+    """Convert relative markdown links to absolute URLs."""
+    def _replace(match: re.Match) -> str:
+        text = match.group(1)
+        href = match.group(2)
+        if href.startswith(("http://", "https://", "mailto:", "tel:", "#")):
+            return match.group(0)
+        absolute = urljoin(base_url, href)
+        return f"[{text}]({absolute})"
+    return re.sub(r"\[([^\]]*)\]\(([^)]+)\)", _replace, markdown)
+
+
+_SOCIAL_NOISE = re.compile(
+    r"(?:facebook|instagram|linkedin|bluesky|bsky\.app|twitter|youtube"
+    r"|google\.com/maps|route\s*anzeigen|teilen)",
+    re.IGNORECASE,
+)
+
+
+def _filter_external_links(links: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Remove social media, map links, and other noise from external links."""
+    return [l for l in links if not _SOCIAL_NOISE.search(l["label"]) and not _SOCIAL_NOISE.search(l["url"])]
+
+
+def _html_to_markdown(html: str, base_url: str = "") -> str:
     raw_md = md(html, heading_style="ATX", strip=["img"], newline_style="backslash")
+    if base_url:
+        raw_md = _resolve_relative_links(raw_md, base_url)
     lines = raw_md.split("\n")
     cleaned: list[str] = []
     blank_count = 0
@@ -189,10 +215,10 @@ async def _fetch_page(
         log.warning("No main content for %s", url)
         return entry, None
 
-    entry.content_md = _html_to_markdown(main_html)
+    entry.content_md = _html_to_markdown(main_html, base_url=url)
     entry.content_hash = _content_hash(entry.content_md)
     entry.last_fetched = datetime.now(timezone.utc).isoformat()
-    entry.external_links = _extract_external_links(soup, url)
+    entry.external_links = _filter_external_links(_extract_external_links(soup, url))
 
     return entry, soup
 
