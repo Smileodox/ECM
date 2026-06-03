@@ -65,11 +65,19 @@ class TestPreferAmendmentSections:
         result = _prefer_amendment_sections([c1, c2])
         assert len(result) == 2
 
-    def test_eignung_not_affected(self):
+    def test_eignung_superseded_by_amendment(self):
         eignung = make_citation(section_id="§3", doc_type="eignung")
         aenderung = make_citation(section_id="§3", doc_type="aenderung")
         result = _prefer_amendment_sections([eignung, aenderung])
-        assert len(result) == 2
+        assert len(result) == 1
+        assert result[0].doc_type == "aenderung"
+
+    def test_zulassung_superseded_by_amendment(self):
+        zulassung = make_citation(section_id="§5", doc_type="zulassung")
+        aenderung = make_citation(section_id="§5", doc_type="aenderung")
+        result = _prefer_amendment_sections([zulassung, aenderung])
+        assert len(result) == 1
+        assert result[0].doc_type == "aenderung"
 
 
 class TestEnforceDiversity:

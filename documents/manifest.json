@@ -1,6 +1,6 @@
 {
   "scraped_at": "2026-05-22T08:19:00.906463+00:00",
-  "total_pdfs": 358,
+  "total_pdfs": 360,
   "entries": [
     {
       "source_url": "https://cms-cdn.lmu.de/media/contenthub/amtliche-veroeffentlichungen/1276-12aek-ma-2017-ps00.pdf",
@@ -3939,6 +3939,27 @@
       "link_text": "Satzung zur Änderung der Satzung über das Eignungsverfahren für den Masterstudiengang Wirtschaftspädagogik II an der Ludwig-Maximilians-Universität München vom 13. Mai 2015 (PDF, 24 KB)",
       "downloaded": true,
       "file_size_bytes": 24152
+    },
+    {
+      "filename": "eign-master-bwl.pdf",
+      "source_url": "https://cms-cdn.lmu.de/media/04-som/fakultaetswebsite-som/downloads/eignungssatzung_master_bwl.pdf",
+      "doc_type": "eignung",
+      "programs": [
+        "Betriebswirtschaftslehre"
+      ],
+      "title": "Satzung über das Eignungsverfahren für den Masterstudiengang Betriebswirtschaftslehre"
+    },
+    {
+      "source_url": "https://cms-cdn.lmu.de/media/contenthub/amtliche-veroeffentlichungen/838-aend_eignung_master_bwl.pdf",
+      "filename": "838-aend_eignung_master_bwl.pdf",
+      "doc_type": "aenderung",
+      "programs": [
+        "Betriebswirtschaftslehre"
+      ],
+      "title": "Satzung zur Änderung der Satzung über das Eignungsverfahren für den Masterstudiengang Betriebswirtschaftslehre",
+      "link_text": "",
+      "downloaded": true,
+      "file_size_bytes": 23422
     }
   ]
 }

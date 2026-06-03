@@ -52,7 +52,7 @@ def generate_summary(pages: list[ParsedPage]) -> str | None:
                     {"role": "user", "content": first_pages_text},
                 ],
                 temperature=0.1,
-                max_tokens=300,
+                max_completion_tokens=300,
             )
             return response.choices[0].message.content.strip()
         except RateLimitError as e:

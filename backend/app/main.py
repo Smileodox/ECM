@@ -1,24 +1,34 @@
 import logging
+import os
 import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from pythonjsonlogger.json import JsonFormatter
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s [%(request_id)s] %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S",
-)
+_handler = logging.StreamHandler()
+if os.environ.get("LOG_FORMAT") == "text":
+    _handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)s %(name)s [%(request_id)s] %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    ))
+else:
+    _handler.setFormatter(JsonFormatter(
+        fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
+        rename_fields={"asctime": "timestamp", "levelname": "level", "name": "logger"},
+        datefmt="%Y-%m-%dT%H:%M:%SZ",
+    ))
+logging.root.handlers = [_handler]
+logging.root.setLevel(logging.INFO)
 
 _log_filter_class = type("RequestIDFilter", (logging.Filter,), {
     "filter": lambda self, record: (setattr(record, "request_id", "-") or True) if not hasattr(record, "request_id") else True,
 })
-for _h in logging.root.handlers:
-    _h.addFilter(_log_filter_class())
+_handler.addFilter(_log_filter_class())
 
 from app.config import settings
 from app.limiter import limiter
