@@ -53,9 +53,10 @@ class Chunk:
     sub_part: str  # e.g. ""
     source_url: str = ""
     chunk_index: int = 0
-    doc_type: str = ""  # psto | eignung | zulassung | aenderung
+    doc_type: str = ""  # psto | eignung | zulassung | aenderung | web_1x1
     program_name: str = ""  # e.g. "Informatik"
     amendment_context: str = ""  # e.g. "[Änderungssatzung: Ändert die ...]"
+    topic_slug: str = ""  # e.g. "rueckmeldung" (web pages only)
 
     @property
     def id(self) -> str:

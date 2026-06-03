@@ -124,7 +124,7 @@ export function ChatWindow() {
                 How can I help you?
               </h2>
               <p className="mt-2 max-w-md text-sm text-text-muted animate-welcome-fade-up stagger-3">
-                Questions about study and exam regulations, eligibility requirements, and admission rules
+                Questions about studying at LMU — regulations, enrollment, fees, deadlines, and more
               </p>
               <div className="mt-8 flex flex-wrap justify-center gap-3">
                 {[
@@ -133,12 +133,12 @@ export function ChatWindow() {
                     icon: "M4.26 10.147a60 60 0 0 0-.491 6.347A48.6 48.6 0 0 1 12 20.904a48.6 48.6 0 0 1 8.232-4.41 61 61 0 0 0-.491-6.347m-15.482 0a51 51 0 0 0-3.658.816A50 50 0 0 1 12 2.25c3.67 0 7.213.394 10.643 1.136a52 52 0 0 0-3.658-.816M4.26 10.147A50.1 50.1 0 0 1 12 8.443 50.1 50.1 0 0 1 19.74 10.147",
                   },
                   {
-                    text: programName ? `Admission requirements for ${programName}?` : "What are the admission requirements?",
-                    icon: "M9 12.75 11.25 15 15 9.75m-3-7.036A11.96 11.96 0 0 1 3.598 6 11.97 11.97 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622A12 12 0 0 0 20.402 6a12 12 0 0 0-8.402-3.286Z",
+                    text: "How do I re-register for next semester?",
+                    icon: "M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182",
                   },
                   {
-                    text: "How long is the master's thesis?",
-                    icon: "M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
+                    text: programName ? `Admission requirements for ${programName}?` : "What are the admission requirements?",
+                    icon: "M9 12.75 11.25 15 15 9.75m-3-7.036A11.96 11.96 0 0 1 3.598 6 11.97 11.97 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622A12 12 0 0 0 20.402 6a12 12 0 0 0-8.402-3.286Z",
                   },
                 ].map((q, idx) => (
                   <button
@@ -206,7 +206,7 @@ export function ChatWindow() {
 
       {/* Legal disclaimer */}
       <p className="shrink-0 border-t border-border-default px-4 py-1.5 text-center text-[0.7rem] text-text-muted">
-        AI answers may contain errors — official regulations are authoritative
+        AI answers may contain errors — verify important information with official LMU sources
       </p>
 
       {/* Citation Drawer */}

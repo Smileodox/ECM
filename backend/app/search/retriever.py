@@ -758,3 +758,190 @@ async def retrieve(
         ", ".join(f"{k}={v}" for k, v in timing.items()),
     )
     return RetrievalResult(citations=citations, low_confidence=low_confidence, timing=timing)
+
+
+# ---------------------------------------------------------------------------
+# Web index retrieval (campuslmu-web-v1)
+# ---------------------------------------------------------------------------
+
+_web_search_client: SearchClient | None = None
+_web_search_client_created: float = 0
+
+_WEB_SELECT_FIELDS = [
+    "id", "content", "doc_name", "doc_filename", "source_url",
+    "section_title", "chunk_index", "doc_type", "topic_slug",
+]
+
+
+def _get_web_search_client() -> SearchClient:
+    global _web_search_client, _web_search_client_created
+    now = time.monotonic()
+    if _web_search_client is None or (now - _web_search_client_created > _SEARCH_CLIENT_MAX_AGE):
+        _web_search_client = SearchClient(
+            endpoint=settings.azure_search_endpoint,
+            index_name=settings.azure_search_web_index_name,
+            credential=AzureKeyCredential(settings.azure_search_key),
+        )
+        _web_search_client_created = now
+    return _web_search_client
+
+
+async def _web_search_hybrid(
+    search_query: str,
+    query_vector: list[float],
+    top_k: int,
+) -> list[tuple[float, dict]]:
+    client = _get_web_search_client()
+    try:
+        results = await client.search(
+            search_text=search_query,
+            vector_queries=[
+                VectorizedQuery(vector=query_vector, k_nearest_neighbors=top_k, fields="content_vector"),
+            ],
+            query_type="semantic",
+            semantic_configuration_name="default",
+            top=top_k,
+            select=_WEB_SELECT_FIELDS,
+        )
+        scored: list[tuple[float, dict]] = []
+        async for result in results:
+            score = result.get("@search.reranker_score") or 0.0
+            scored.append((score, dict(result)))
+        return scored
+    except Exception as e:
+        if "402" in str(e) or "semantic" in str(e).lower():
+            logger.warning("Semantic reranker unavailable for web index, falling back")
+            results = await client.search(
+                search_text=search_query,
+                vector_queries=[
+                    VectorizedQuery(vector=query_vector, k_nearest_neighbors=top_k, fields="content_vector"),
+                ],
+                top=top_k,
+                select=_WEB_SELECT_FIELDS,
+            )
+            scored = []
+            async for result in results:
+                scored.append((result.get("@search.score", 0.0), dict(result)))
+            return scored
+        raise
+
+
+async def _web_search_bm25(search_query: str, top_k: int) -> list[tuple[float, dict]]:
+    client = _get_web_search_client()
+    try:
+        results = await client.search(
+            search_text=search_query,
+            query_type="semantic",
+            semantic_configuration_name="default",
+            top=top_k,
+            select=_WEB_SELECT_FIELDS,
+        )
+        scored: list[tuple[float, dict]] = []
+        async for result in results:
+            scored.append((result.get("@search.reranker_score", 0.0), dict(result)))
+        return scored
+    except Exception as e:
+        if "402" in str(e) or "semantic" in str(e).lower():
+            results = await client.search(
+                search_text=search_query, top=top_k, select=_WEB_SELECT_FIELDS,
+            )
+            scored = []
+            async for result in results:
+                scored.append((result.get("@search.score", 0.0), dict(result)))
+            return scored
+        raise
+
+
+def _web_doc_to_citation(score: float, doc: dict, index: int) -> Citation:
+    return Citation(
+        index=index,
+        section_id="",
+        section_title=doc.get("section_title", ""),
+        absatz=None,
+        page_number=0,
+        doc_name=doc.get("doc_name", ""),
+        doc_filename=doc.get("doc_filename", ""),
+        program_name="",
+        source_url=doc.get("source_url", ""),
+        content=doc.get("content", ""),
+        doc_type=doc.get("doc_type", "web_1x1"),
+        reranker_score=score,
+        chunk_index=doc.get("chunk_index"),
+    )
+
+
+async def retrieve_web(
+    query: str,
+    top_k: int = 10,
+) -> RetrievalResult:
+    """Retrieve from the web content index. 2-path: vector + BM25, no HyDE."""
+    timing: dict[str, float] = {}
+    t0 = time.perf_counter()
+
+    search_query = query
+    if not _is_german(query):
+        search_query = await _translate_to_german(query)
+
+    t1 = time.perf_counter()
+    query_vector = await _embed_query(search_query)
+    timing["embed_ms"] = round((time.perf_counter() - t1) * 1000, 1)
+
+    t2 = time.perf_counter()
+    hybrid_results, bm25_results = await asyncio.gather(
+        _web_search_hybrid(search_query, query_vector, top_k),
+        _web_search_bm25(search_query, top_k),
+    )
+    timing["search_ms"] = round((time.perf_counter() - t2) * 1000, 1)
+
+    all_scored = _reciprocal_rank_fusion([hybrid_results, bm25_results])
+
+    primary = [(s, r) for s, r in all_scored if s >= settings.reranker_min_score]
+    if not primary:
+        fallback = [(s, r) for s, r in all_scored if s >= settings.reranker_fallback_score]
+        fallback.sort(key=lambda x: x[0], reverse=True)
+        chosen = fallback[:FALLBACK_TOP_K]
+        low_confidence = bool(chosen)
+    else:
+        chosen = primary
+        low_confidence = False
+
+    citations = [_web_doc_to_citation(s, r, i) for i, (s, r) in enumerate(chosen[:top_k], 1)]
+    citations = _enforce_diversity(citations)
+    citations = citations[:10]
+
+    for i, c in enumerate(citations, 1):
+        c.index = i
+
+    timing["total_ms"] = round((time.perf_counter() - t0) * 1000, 1)
+    logger.info("Web retrieval: %d citations for: %s [%s]", len(citations), query[:60], ", ".join(f"{k}={v}" for k, v in timing.items()))
+    return RetrievalResult(citations=citations, low_confidence=low_confidence, timing=timing)
+
+
+async def retrieve_combined(
+    query: str,
+    top_k: int = 10,
+    doc_type: str | None = None,
+    program_name: str | None = None,
+    query_type: str | None = None,
+) -> RetrievalResult:
+    """Retrieve from BOTH regulation and web indices, merge with RRF."""
+    reg_result, web_result = await asyncio.gather(
+        retrieve(query, top_k=top_k, doc_type=doc_type, program_name=program_name, query_type=query_type),
+        retrieve_web(query, top_k=top_k),
+    )
+
+    all_citations = reg_result.citations + web_result.citations
+    all_citations.sort(key=lambda c: c.reranker_score, reverse=True)
+    all_citations = all_citations[:top_k]
+
+    for i, c in enumerate(all_citations, 1):
+        c.index = i
+
+    timing = {
+        "regulation_ms": reg_result.timing.get("total_ms", 0),
+        "web_ms": web_result.timing.get("total_ms", 0),
+    }
+    low_confidence = reg_result.low_confidence and web_result.low_confidence
+
+    logger.info("Combined retrieval: %d reg + %d web → %d total", len(reg_result.citations), len(web_result.citations), len(all_citations))
+    return RetrievalResult(citations=all_citations, low_confidence=low_confidence, timing=timing)

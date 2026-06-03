@@ -18,6 +18,25 @@ _QUERY_TYPES = {
         r"wie komme ich rein|kann ich mich bewerben|bin ich zugelassen)",
         re.IGNORECASE,
     ),
+    "administrative": re.compile(
+        r"(?:rückmeldung|exmatrikulation|exmatrikulieren|immatrikulation|"
+        r"adressänderung|adresse ändern|beurlaubung|krankenversicherung|"
+        r"semesterbeitrag|beiträge|gebühren|semesterticket|lmucard|"
+        r"bescheinigung|online.?selbstbedienung|datenschutz|"
+        r"re.?register|re.?enroll|health insurance|semester ticket)",
+        re.IGNORECASE,
+    ),
+    "deadline": re.compile(
+        r"(?:frist(?:en)?|deadline|termin|bis wann|ab wann|"
+        r"semestertermin|vorlesungszeit|vorlesungsbeginn|semesterende|"
+        r"when is|when does|when do i need)",
+        re.IGNORECASE,
+    ),
+    "contact": re.compile(
+        r"(?:wo (?:finde|ist|kann)|kontakt|ansprechpartner|anlaufstelle|"
+        r"studienberatung|prüfungsamt|studentenkanzlei|where can i|who do i)",
+        re.IGNORECASE,
+    ),
     "process": re.compile(
         r"(?:wie melde|wie bewerbe|wie kann ich|was muss ich|anmeldung|ablauf|"
         r"schritt|verfahren|beantragen|einreichen|anrechnung|frist|deadline|"
@@ -79,10 +98,28 @@ EXAMPLES = {
             "a": "Für die Zulassung zum Masterstudiengang Informatik benötigst du laut Eignungssatzung [Quelle 1]:\n\n1. **Bachelorabschluss** in Informatik oder einem verwandten Fach mit mindestens 180 ECTS (§ 2 Abs. 1 [Quelle 1]).\n2. **Notendurchschnitt**: In der Regel mindestens 2,5 oder besser (§ 3 [Quelle 1]).\n3. **Eignungsverfahren**: Ggf. ein Auswahlgespräch (§ 4 [Quelle 1]).\n\nDie genauen Anforderungen können je nach Studiengang variieren.",
         },
     ],
+    "administrative": [
+        {
+            "q": "Wie melde ich mich fürs nächste Semester rück?",
+            "a": "Die Rückmeldung erfolgt durch Überweisung des Semesterbeitrags auf das Konto der LMU [Quelle 1]:\n\n1. **Betrag überweisen**: Aktuell 97,00 € an den Freistaat Bayern.\n2. **Matrikelnummer angeben**: Deine Matrikelnummer muss im Verwendungszweck stehen.\n3. **Frist beachten**: Die Rückmeldung muss bis zum angegebenen Stichtag erfolgen.\n4. **LMUcard validieren** nach erfolgreicher Rückmeldung.\n\nBei verspäteter Rückmeldung droht die Exmatrikulation [Quelle 1].",
+        },
+    ],
+    "deadline": [
+        {
+            "q": "Bis wann muss ich mich rückmelden?",
+            "a": "Die Rückmeldefrist für das Sommersemester endet in der Regel Anfang Februar, für das Wintersemester Ende Juli [Quelle 1]. Den genauen Stichtag findest du auf der LMU-Seite zu Terminen für Studierende oder in deinem persönlichen Beitragskonto online.",
+        },
+    ],
+    "contact": [
+        {
+            "q": "Wo bekomme ich eine Immatrikulationsbescheinigung?",
+            "a": "Immatrikulationsbescheinigungen kannst du über die **Online-Selbstbedienungsfunktionen** der LMU selbst herunterladen und ausdrucken [Quelle 1]. Für amtliche Bescheinigungen mit Siegel wende dich an die **Studentenkanzlei** (Geschwister-Scholl-Platz 1) [Quelle 2].",
+        },
+    ],
     "fallback": [
         {
             "q": "Wo finde ich Informationen zu Stipendien?",
-            "a": "Dazu habe ich leider keine Information in den mir vorliegenden Dokumenten gefunden. Die PSTOs und Eignungssatzungen regeln Prüfungs- und Zulassungsfragen, aber keine Stipendien. Bitte wende dich an die **Zentrale Studienberatung** oder das **Stipendienreferat** der LMU.",
+            "a": "Informationen zu Stipendien und Studienfinanzierung findest du auf der LMU-Seite zu Studienfinanzierung [Quelle 1]. Für eine persönliche Beratung kannst du dich an die **Zentrale Studienberatung** oder das **Stipendienreferat** der LMU wenden.",
         },
     ],
 }

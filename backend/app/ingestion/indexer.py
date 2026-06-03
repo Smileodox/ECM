@@ -45,10 +45,10 @@ def _get_index_client() -> SearchIndexClient:
     )
 
 
-def _get_search_client() -> SearchClient:
+def _get_search_client(index_name: str | None = None) -> SearchClient:
     return SearchClient(
         endpoint=settings.azure_search_endpoint,
-        index_name=settings.azure_search_index_name,
+        index_name=index_name or settings.azure_search_index_name,
         credential=AzureKeyCredential(settings.azure_search_key),
     )
 
@@ -315,6 +315,99 @@ def get_indexed_documents() -> set[str]:
     except Exception as e:
         logger.warning("Could not query indexed documents: %s", e)
     return set()
+
+
+# ---------------------------------------------------------------------------
+# Web index (campuslmu-web-v1)
+# ---------------------------------------------------------------------------
+
+
+def create_or_update_web_index() -> None:
+    """Create or update the web content search index."""
+    index = SearchIndex(
+        name=settings.azure_search_web_index_name,
+        fields=[
+            SimpleField(name="id", type=SearchFieldDataType.String, key=True, filterable=True),
+            SearchableField(name="content", type=SearchFieldDataType.String, analyzer_name="de.lucene"),
+            SearchField(
+                name="content_vector",
+                type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
+                searchable=True,
+                vector_search_dimensions=1536,
+                vector_search_profile_name="default-vector-profile",
+            ),
+            SimpleField(name="doc_name", type=SearchFieldDataType.String, filterable=True, facetable=True),
+            SimpleField(name="doc_filename", type=SearchFieldDataType.String, filterable=True),
+            SimpleField(name="source_url", type=SearchFieldDataType.String),
+            SearchableField(name="section_title", type=SearchFieldDataType.String, filterable=True),
+            SimpleField(name="chunk_index", type=SearchFieldDataType.Int32, sortable=True, filterable=True),
+            SimpleField(name="doc_type", type=SearchFieldDataType.String, filterable=True, facetable=True),
+            SearchableField(name="topic_slug", type=SearchFieldDataType.String, filterable=True, facetable=True),
+        ],
+        vector_search=VectorSearch(
+            algorithms=[
+                HnswAlgorithmConfiguration(
+                    name="default-hnsw",
+                    parameters={"m": 16, "efConstruction": 400, "efSearch": 500, "metric": "cosine"},
+                ),
+            ],
+            profiles=[
+                VectorSearchProfile(name="default-vector-profile", algorithm_configuration_name="default-hnsw"),
+            ],
+        ),
+        semantic_search=SemanticSearch(
+            configurations=[
+                SemanticConfiguration(
+                    name="default",
+                    prioritized_fields=SemanticPrioritizedFields(
+                        content_fields=[SemanticField(field_name="content")],
+                        title_field=SemanticField(field_name="section_title"),
+                        keywords_fields=[SemanticField(field_name="topic_slug")],
+                    ),
+                ),
+            ],
+        ),
+    )
+    client = _get_index_client()
+    client.create_or_update_index(index)
+    logger.info("Web index '%s' created/updated.", settings.azure_search_web_index_name)
+
+
+def upload_web_chunks(chunks: list[Chunk], embeddings: list[list[float]]) -> int:
+    """Upload web content chunks to the web search index."""
+    client = _get_search_client(settings.azure_search_web_index_name)
+
+    documents = []
+    for chunk, embedding in zip(chunks, embeddings):
+        documents.append({
+            "id": chunk.id,
+            "content": chunk.content,
+            "content_vector": embedding,
+            "doc_name": chunk.doc_name,
+            "doc_filename": chunk.doc_filename,
+            "source_url": chunk.source_url,
+            "section_title": chunk.section_title,
+            "chunk_index": chunk.chunk_index,
+            "doc_type": chunk.doc_type,
+            "topic_slug": chunk.topic_slug,
+        })
+
+    uploaded = 0
+    batch_size = 100
+    for i in range(0, len(documents), batch_size):
+        batch = documents[i : i + batch_size]
+        result = client.upload_documents(documents=batch)
+        succeeded = sum(1 for r in result if r.succeeded)
+        uploaded += succeeded
+        logger.info("Web index: uploaded %d-%d: %d/%d", i + 1, min(i + batch_size, len(documents)), succeeded, len(batch))
+    return uploaded
+
+
+def ingest_web_chunks(chunks: list[Chunk]) -> int:
+    """Full pipeline for web chunks: create index, embed, upload."""
+    create_or_update_web_index()
+    embeddings = embed_chunks(chunks)
+    return upload_web_chunks(chunks, embeddings)
 
 
 MAX_EMBED_CHARS = 16000
