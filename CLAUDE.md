@@ -42,12 +42,14 @@ cd backend && python -m app.scraper --resume
 # Run web scraper (1x1 pages, depth-2)
 cd backend && python -m app.scraper.web_scraper_cli
 
-# Ingest documents (needs .env with Azure credentials)
+# Ingest regulation PDFs (needs .env with Azure credentials)
 curl -X POST http://localhost:8000/api/ingest
+
+# Ingest web content into campuslmu-web-v1 (run after web scraper)
+cd backend && python ingest_web.py
 ```
 
 ## What still needs to happen
-- **Web content ingestion endpoint** — like /api/ingest but for web chunks → campuslmu-web-v1 index
 - **Azure Managed Identity** — replace admin API keys with managed identity
 - **Application Insights / APM** — latency tracking, error monitoring
 - **CI/CD secrets** — GitHub Actions workflow exists, needs Azure credentials

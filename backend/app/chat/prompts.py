@@ -191,6 +191,24 @@ _DOC_TYPE_LABELS = {
 }
 
 
+def _short_doc_label(c) -> str:
+    """Build a concise document label like 'Informatik PSTO (2023)' instead of the full legal title."""
+    doc_type = getattr(c, "doc_type", "")
+    doc_type_label = _DOC_TYPE_LABELS.get(doc_type, "")
+    program = getattr(c, "program_name", "")
+    year = _extract_year(getattr(c, "doc_filename", ""))
+
+    if program and doc_type_label:
+        label = f"{program} {doc_type_label}"
+    elif doc_type_label:
+        label = doc_type_label
+    else:
+        label = c.doc_name
+    if year:
+        label += f" ({year})"
+    return label
+
+
 def _build_citation_header(c) -> str:
     doc_type = getattr(c, "doc_type", "")
 
@@ -198,19 +216,12 @@ def _build_citation_header(c) -> str:
         section = c.section_title or c.doc_name
         return f'[Quelle {c.index}: "{c.doc_name}" > {section} | LMU Webseite]'
 
-    # Regulation citation
     location = f"{c.section_id} {c.section_title}"
     if c.absatz:
         location += f", {c.absatz}"
     location += f", S. {c.page_number}"
 
-    doc_type_label = _DOC_TYPE_LABELS.get(doc_type, "")
-    doc_label = c.doc_name
-    year = _extract_year(getattr(c, "doc_filename", ""))
-    if year:
-        doc_label += f" (Fassung {year})"
-    if doc_type_label:
-        doc_label = f"[{doc_type_label}] {doc_label}"
+    doc_label = _short_doc_label(c)
 
     return f"[Quelle {c.index}: {location} | {doc_label}]"
 

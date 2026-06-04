@@ -12,7 +12,7 @@ from openai import AsyncAzureOpenAI
 
 from app.chat.citations import extract_used_citation_indices, normalize_citation_markers, strip_for_display
 from app.chat.few_shot import classify_query
-from app.chat.prompts import NO_INFO_FALLBACK, build_context, build_system_prompt, build_user_prompt
+from app.chat.prompts import NO_INFO_FALLBACK, build_context, build_system_prompt, build_user_prompt, _short_doc_label
 from app.config import settings
 from app.models import ChatMessage, Citation
 from app.search.retriever import RetrievalResult, retrieve, retrieve_web, retrieve_combined
@@ -233,16 +233,24 @@ _EN_PROGRAM_MAP = {
 
 def _detect_program(message: str) -> str | None:
     msg_lower = message.lower()
+    program_names = _load_program_names()
+
     for en_name, de_name in _EN_PROGRAM_MAP.items():
-        if en_name in msg_lower:
+        matched = en_name in msg_lower
+        if not matched:
             de_lower = de_name.lower()
-            for name in _load_program_names():
-                if name.lower() == de_lower:
+            de_pattern = r"(?<![a-zäöüß])" + re.escape(de_lower) + r"(?![a-zäöüß])"
+            matched = bool(re.search(de_pattern, msg_lower))
+        if matched:
+            candidates = [de_name.lower(), en_name.lower()]
+            for name in program_names:
+                if name.lower() in candidates:
                     return name
-            for name in _load_program_names():
-                if de_lower in name.lower():
-                    return name
-    for name in _load_program_names():
+            for candidate in candidates:
+                for name in program_names:
+                    if candidate in name.lower():
+                        return name
+    for name in program_names:
         pattern = r"(?<![a-zäöüß])" + re.escape(name.lower()) + r"(?![a-zäöüß])"
         if re.search(pattern, msg_lower):
             return name
@@ -553,7 +561,7 @@ async def chat_stream(
             "section_id": c.section_id,
             "section_title": c.section_title,
             "absatz": c.absatz,
-            "doc_name": c.doc_name,
+            "doc_name": _short_doc_label(c) if c.doc_type != "web_1x1" else c.doc_name,
             "doc_type": c.doc_type,
         }
         for c in citations
@@ -601,7 +609,7 @@ async def chat_stream(
             "section_title": c.section_title,
             "absatz": c.absatz,
             "page_number": c.page_number,
-            "doc_name": c.doc_name,
+            "doc_name": _short_doc_label(c) if c.doc_type != "web_1x1" else c.doc_name,
             "source_url": c.source_url,
             "content": strip_for_display(c.content),
             "doc_type": c.doc_type,

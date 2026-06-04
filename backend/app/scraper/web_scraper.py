@@ -26,9 +26,14 @@ STUDENT_PATH_PREFIXES = (
     "/de/studium/hochschulzugang/",
     "/de/studium/studienangebot/",
     "/de/studium/wichtige-kontakte/",
+    "/de/studium/beratung-und-service/",
     "/de/studium/1x1-fuer-studieninteressierte/",
     "/de/studium/internationale-vollzeit-studierende/",
     "/de/die-lmu/struktur/zentrale-universitaetsverwaltung/informations-und-kommunikationstechnik-dezernat-vi/it-servicedesk/",
+)
+
+SKIP_PATH_PREFIXES = (
+    "/de/workspace-fuer-studierende/meldungen-und-termine/",
 )
 
 SKIP_EXTENSIONS = frozenset({".pdf", ".zip", ".docx", ".xlsx", ".jpg", ".png"})
@@ -41,7 +46,7 @@ EXTERNAL_DOMAINS = frozenset({
     "it-servicedesk.uni-muenchen.de",
 })
 
-WEB_MANIFEST_PATH = Path(__file__).resolve().parents[3] / "backend" / "data" / "web_manifest.json"
+WEB_MANIFEST_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "web_manifest.json"
 
 
 @dataclass
@@ -61,12 +66,13 @@ class WebPageEntry:
 def _slug_from_url(url: str) -> str:
     path = urlparse(url).path.rstrip("/")
     last_segment = path.rsplit("/", 1)[-1] if "/" in path else path
+    last_segment = re.sub(r"\.html?$", "", last_segment)
     return last_segment or "index"
 
 
 def _normalize_url(url: str) -> str:
     parsed = urlparse(url)
-    clean_path = parsed.path.rstrip("/") + "/"
+    clean_path = re.sub(r"\.html?$", "", parsed.path.rstrip("/")) + "/"
     return f"{parsed.scheme}://{parsed.hostname}{clean_path}"
 
 
@@ -75,10 +81,12 @@ def _is_student_relevant(url: str) -> bool:
     host = parsed.hostname or ""
     if host in EXTERNAL_DOMAINS:
         return False
-    if not host.endswith("lmu.de") or host != "www.lmu.de":
+    if host != "www.lmu.de":
         return False
     path = parsed.path
     if any(path.rsplit(".", 1)[-1].lower() == ext.lstrip(".") for ext in SKIP_EXTENSIONS if "." in path):
+        return False
+    if any(path.startswith(skip) for skip in SKIP_PATH_PREFIXES):
         return False
     return any(path.startswith(prefix) for prefix in STUDENT_PATH_PREFIXES)
 
@@ -264,6 +272,7 @@ async def scrape_1x1_pages(
             return []
 
         all_entries: list[WebPageEntry] = []
+        seen_hashes: set[str] = set()
         depth_2_queue: list[tuple[str, str, int, str]] = []
         counter = 0
         total_d1 = len(queue)
@@ -271,6 +280,13 @@ async def scrape_1x1_pages(
         for url, label, depth, parent_url in queue:
             counter += 1
             entry, soup = await _fetch_page(client, url, label, depth, parent_url)
+
+            if entry.content_hash and entry.content_hash in seen_hashes:
+                log.debug("[%d/%d] d%d %s — duplicate content, skipping", counter, total_d1, depth, entry.topic_slug)
+                await asyncio.sleep(REQUEST_DELAY)
+                continue
+            if entry.content_hash:
+                seen_hashes.add(entry.content_hash)
 
             old = existing_by_url.get(_normalize_url(url))
             if old and old.content_hash and old.content_hash == entry.content_hash:
@@ -295,6 +311,13 @@ async def scrape_1x1_pages(
             total_d2 = len(depth_2_queue)
             for i, (url, label, depth, parent_url) in enumerate(depth_2_queue):
                 entry, _ = await _fetch_page(client, url, label, depth, parent_url)
+
+                if entry.content_hash and entry.content_hash in seen_hashes:
+                    log.debug("[%d/%d] d%d %s — duplicate content, skipping", i + 1, total_d2, depth, entry.topic_slug)
+                    await asyncio.sleep(REQUEST_DELAY)
+                    continue
+                if entry.content_hash:
+                    seen_hashes.add(entry.content_hash)
 
                 old = existing_by_url.get(_normalize_url(url))
                 if old and old.content_hash and old.content_hash == entry.content_hash:
