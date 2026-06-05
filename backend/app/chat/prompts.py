@@ -1,13 +1,45 @@
 import re
 
-NO_INFO_FALLBACK = (
-    "I could not find information on this in the available sources.\n\n"
-    "**What you can do:**\n"
-    "- Make your question more specific\n"
-    "- Select a program from the dropdown above (for regulation questions)\n"
-    "- Check the [LMU 1x1 des Studiums](https://www.lmu.de/de/workspace-fuer-studierende/1x1-des-studiums/) directly\n"
-    "- Contact the [Central Student Advisory Services](https://www.lmu.de/en/study/advice-and-services/central-student-advisory-services/) or your examination office (Prüfungsamt)"
-)
+from app.chat.escalation import resolve_escalation_contacts
+
+
+def build_no_info_fallback(
+    query: str = "",
+    route: str = "general",
+    query_type: str = "factual",
+    lang: str = "de",
+    program_name: str | None = None,
+) -> str:
+    """Build a topic-specific fallback when no citations are found."""
+    contacts = resolve_escalation_contacts(query, route, query_type, program_name)
+    primary = contacts[0]
+    name_key = "name_en" if lang == "en" else "name_de"
+    url_key = "url_en" if lang == "en" else "url"
+
+    if lang == "en":
+        msg = (
+            "I could not find information on this in the available sources.\n\n"
+            "**What you can do:**\n"
+            "- Make your question more specific\n"
+            "- Select a program from the dropdown above (for regulation questions)\n"
+            f"- Contact the [{primary[name_key]}]({primary[url_key]})"
+        )
+        if len(contacts) > 1:
+            sec = contacts[1]
+            msg += f" or the [{sec[name_key]}]({sec[url_key]})"
+    else:
+        msg = (
+            "Dazu habe ich leider keine passenden Informationen in den verfügbaren Quellen gefunden.\n\n"
+            "**Was du tun kannst:**\n"
+            "- Formuliere deine Frage konkreter\n"
+            "- Wähle oben einen Studiengang aus (bei Fragen zu Prüfungsordnungen)\n"
+            f"- Wende dich an die [{primary[name_key]}]({primary[url_key]})"
+        )
+        if len(contacts) > 1:
+            sec = contacts[1]
+            msg += f" oder die [{sec[name_key]}]({sec[url_key]})"
+
+    return msg
 
 _REGULATION_DOC_TYPES = frozenset({"psto", "eignung", "zulassung", "aenderung"})
 
@@ -47,7 +79,10 @@ Bevor du antwortest, gehe diese Schritte durch:
 
 7. **Kürze.** Beginne immer mit einer kurzen, direkten Antwort (2–4 Sätze). Nutze danach Aufzählungen oder nummerierte Schritte. Maximal 300 Wörter, es sei denn, die Frage verlangt explizit nach einer ausführlichen Erklärung.
 
-8. **Einschränkungen einmal nennen.** Wenn Informationen fehlen, weise **einmal am Ende** darauf hin. Formuliere Antworten selbstbewusst, wenn die Quellen eindeutig sind."""
+8. **Einschränkungen einmal nennen.** Wenn Informationen fehlen, weise **einmal am Ende** darauf hin. Formuliere Antworten selbstbewusst, wenn die Quellen eindeutig sind.
+
+9. **Anlaufstellen.** Wenn du nicht vollständig antworten kannst oder der Nutzer persönliche Beratung braucht, empfehle die passendste der folgenden Stellen:
+{escalation_block}"""
 
 _REGULATION_LAYER = """
 
@@ -86,9 +121,17 @@ _LANG_DE = (
     "Antworte auf Deutsch. Verwende das Format [Quelle N] für Quellenverweise."
 )
 _LANG_EN = (
-    "Antworte auf Englisch. Ergänze deutsche Fachbegriffe in Klammern "
-    '(z.B. "master thesis (Masterarbeit)"). '
-    "Verwende auch bei englischen Antworten immer das Format [Quelle N]."
+    "IMPORTANT: The user is writing in English. You MUST respond entirely in English. "
+    "Do NOT switch to German mid-response — every sentence must be in English. "
+    "When using German legal terms, put the English meaning first with the German in parentheses "
+    '(e.g. "master thesis (Masterarbeit)", "examination regulations (Prüfungsordnung)", '
+    '"re-registration (Rückmeldung)"). '
+    "Use the citation format [Quelle N] (keep 'Quelle' in German for consistency with sources). "
+    "Structure headings and bullet points in English."
+)
+
+_LANG_EN_REMINDER = (
+    "\n\n**REMINDER: Respond in ENGLISH. The user is communicating in English.**"
 )
 
 from functools import lru_cache as _lru_cache
@@ -106,6 +149,13 @@ def _get_language_detector():
 
 _SHORT_MESSAGE_THRESHOLD = 5
 
+_ENGLISH_STARTER = re.compile(
+    r"^(?:what|how|when|where|who|why|which|can|could|do|does|did|is|are|"
+    r"was|were|will|would|should|shall|may|might|has|have|had|tell|please|"
+    r"i\b|i'm|i've|i'd|my)\b",
+    re.IGNORECASE,
+)
+
 
 def _detect_lang(text: str) -> str | None:
     detected = _get_language_detector().detect_language_of(text)
@@ -116,7 +166,7 @@ def _detect_lang(text: str) -> str | None:
     return None
 
 
-def _detect_response_language(text: str, history: list | None = None) -> str:
+def detect_response_language(text: str, history: list | None = None) -> str:
     words = re.findall(r"[a-zäöüßA-ZÄÖÜẞ]+", text)
     if not words:
         return _language_from_history(history) or "de"
@@ -125,6 +175,11 @@ def _detect_response_language(text: str, history: list | None = None) -> str:
         lang = _language_from_history(history)
         if lang:
             return lang
+
+    # Queries starting with English words are English even if they contain German terms
+    stripped = text.strip()
+    if _ENGLISH_STARTER.match(stripped):
+        return "en"
 
     return _detect_lang(text) or _language_from_history(history) or "de"
 
@@ -144,20 +199,37 @@ def _language_from_history(history: list | None) -> str | None:
     return None
 
 
+def _build_escalation_block(
+    query: str, route: str, query_type: str, program_name: str | None = None,
+) -> str:
+    contacts = resolve_escalation_contacts(query, route, query_type, program_name)
+    lines = []
+    for c in contacts:
+        lines.append(f"   - **{c['name_de']}** ({c['name_en']}): {c['scope']} — {c['url']}")
+    return "\n".join(lines)
+
+
 def build_system_prompt(
     query: str = "",
     history: list | None = None,
     content_types: set[str] | None = None,
+    route: str = "general",
+    query_type: str = "factual",
+    program_name: str | None = None,
 ) -> str:
     """Build system prompt with dynamic layers based on content types."""
-    from app.chat.few_shot import format_few_shot_block, get_few_shot_examples
-    examples = get_few_shot_examples(query, max_examples=2)
-    block = format_few_shot_block(examples)
-
-    lang = _detect_response_language(query, history)
+    lang = detect_response_language(query, history)
     instruction = _LANG_EN if lang == "en" else _LANG_DE
 
-    prompt = _BASE_PROMPT.format(language_instruction=instruction)
+    from app.chat.few_shot import format_few_shot_block, get_few_shot_examples
+    examples = get_few_shot_examples(query, max_examples=2, lang=lang)
+    block = format_few_shot_block(examples, lang=lang)
+
+    escalation = _build_escalation_block(query, route, query_type, program_name)
+    prompt = _BASE_PROMPT.format(
+        language_instruction=instruction,
+        escalation_block=escalation,
+    )
 
     types = content_types or set()
     has_regulation = bool(types & _REGULATION_DOC_TYPES)
@@ -169,7 +241,11 @@ def build_system_prompt(
         prompt += _WEB_LAYER
 
     if block:
-        prompt += f"\n\n## Beispiele\n\n{block}"
+        header = "## Examples" if lang == "en" else "## Beispiele"
+        prompt += f"\n\n{header}\n\n{block}"
+
+    if lang == "en":
+        prompt += _LANG_EN_REMINDER
 
     return prompt
 

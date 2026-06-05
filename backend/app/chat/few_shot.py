@@ -125,6 +125,72 @@ EXAMPLES = {
 }
 
 
+EXAMPLES_EN = {
+    "factual": [
+        {
+            "q": "How many ECTS credits does the master thesis in Computer Science have?",
+            "a": "The master thesis (Masterarbeit) in the Computer Science (Informatik) master's program is worth **30 ECTS credits** according to § 14 Abs. 1 [Quelle 1]. The processing time (Bearbeitungszeit) is six months (§ 14 Abs. 3 [Quelle 1]).",
+        },
+        {
+            "q": "What is the standard duration of the BWL master's program?",
+            "a": "The standard duration of study (Regelstudienzeit) for the Business Administration (Betriebswirtschaftslehre) master's program is **four semesters** (§ 5 Abs. 1 [Quelle 1]), totaling 120 ECTS credits.",
+        },
+    ],
+    "process": [
+        {
+            "q": "How do I register for my master thesis?",
+            "a": "To register for your master thesis (Masterarbeit), follow these steps:\n\n1. **Find a topic and supervisor**: Choose an eligible supervisor (prüfungsberechtigter Betreuer) according to § 14 Abs. 2 [Quelle 1].\n2. **Register at the examination office (Prüfungsamt)**: Submit the completed registration form together with the supervision confirmation (§ 14 Abs. 4 [Quelle 1]).\n3. **Processing period**: You have six months from registration (§ 14 Abs. 3 [Quelle 1]).\n\nFor detailed procedural questions, contact your [examination office (Prüfungsamt)](https://www.lmu.de/de/studium/wichtige-kontakte/pruefungsaemter/).",
+        },
+        {
+            "q": "How does the credit transfer process work?",
+            "a": "Credit transfer (Anrechnung) for external coursework is governed by § 4 [Quelle 1]:\n\n1. **Submit an application** to the examination board (Prüfungsausschuss) with documentation of the completed coursework.\n2. **Equivalence review**: The board assesses whether content, scope, and requirements are equivalent (§ 4 Abs. 1 [Quelle 1]).\n3. **Decision**: The decision is typically made within four weeks.\n\nFor details, I recommend scheduling an appointment at your [examination office (Prüfungsamt)](https://www.lmu.de/de/studium/wichtige-kontakte/pruefungsaemter/).",
+        },
+    ],
+    "comparison": [
+        {
+            "q": "What is the difference between mandatory and elective modules?",
+            "a": "The key difference:\n\n- **Mandatory modules (Pflichtmodule)** (§ 6 [Quelle 1]): Must be completed by all students. They form the core of the program.\n- **Elective modules (Wahlpflichtmodule)** (§ 7 [Quelle 2]): You choose from a predefined catalog. The minimum ECTS from elective modules is specified in the PSTO.\n\nBoth count equally toward your final grade and total ECTS credits.",
+        },
+    ],
+    "amendment": [
+        {
+            "q": "Was § 5 of the Computer Science PSTO amended?",
+            "a": "Yes, § 5 was amended by the amendment statute (Änderungssatzung) of 15 March 2024 [Quelle 2]. The change affects the standard duration of study (Regelstudienzeit), which was reduced from 4 to 3 semesters (§ 5 Abs. 1 [Quelle 2]). All other paragraphs of the original 2017 PSTO [Quelle 1] remain unchanged.",
+        },
+    ],
+    "eligibility": [
+        {
+            "q": "What are the requirements for the Computer Science master's program?",
+            "a": "According to the aptitude regulations (Eignungssatzung) [Quelle 1], you need:\n\n1. **Bachelor's degree** in Computer Science or a related field with at least 180 ECTS (§ 2 Abs. 1 [Quelle 1]).\n2. **Grade average**: Typically 2.5 or better (§ 3 [Quelle 1]).\n3. **Aptitude assessment** (Eignungsverfahren): Possibly an interview (§ 4 [Quelle 1]).\n\nExact requirements may vary by program.",
+        },
+    ],
+    "administrative": [
+        {
+            "q": "How do I re-register for the next semester?",
+            "a": "Re-registration (Rückmeldung) is done by transferring the semester fee to the LMU account [Quelle 1]:\n\n1. **Transfer the amount**: Currently €97.00 to Freistaat Bayern.\n2. **Include your student ID number** (Matrikelnummer) in the transfer reference.\n3. **Meet the deadline**: Re-registration must be completed by the specified date.\n4. **Validate your LMUcard** after successful re-registration.\n\nLate re-registration may result in exmatriculation (Exmatrikulation) [Quelle 1].",
+        },
+    ],
+    "deadline": [
+        {
+            "q": "When is the re-registration deadline?",
+            "a": "The re-registration deadline (Rückmeldefrist) for the summer semester is typically early February, and for the winter semester late July [Quelle 1]. You can find the exact date on the LMU page for student deadlines (Semestertermine) or in your personal fee account online.",
+        },
+    ],
+    "contact": [
+        {
+            "q": "Where can I get a certificate of enrollment?",
+            "a": "You can download and print certificates of enrollment (Immatrikulationsbescheinigungen) via the LMU **online self-service portal** (Online-Selbstbedienung) [Quelle 1]. For officially stamped certificates, contact the [Student Office (Studentenkanzlei)](https://www.lmu.de/de/studium/wichtige-kontakte/studentenkanzlei/) at Geschwister-Scholl-Platz 1 [Quelle 2].",
+        },
+    ],
+    "fallback": [
+        {
+            "q": "Where can I find information about scholarships?",
+            "a": "Information about scholarships and study financing (Studienfinanzierung) is available on the LMU page for study financing [Quelle 1]. For personal advice, you can contact the [Central Student Advisory Services (Zentrale Studienberatung)](https://www.lmu.de/de/studium/wichtige-kontakte/zentrale-studienberatung/).",
+        },
+    ],
+}
+
+
 def classify_query(query: str) -> str:
     matched = [qtype for qtype, pattern in _QUERY_TYPES.items() if pattern.search(query)]
     # If amendment AND eligibility both match, the query spans both doc types —
@@ -134,18 +200,21 @@ def classify_query(query: str) -> str:
     return matched[0] if matched else "factual"
 
 
-def get_few_shot_examples(query: str, max_examples: int = 2) -> list[dict]:
+def get_few_shot_examples(query: str, max_examples: int = 2, lang: str = "de") -> list[dict]:
     """Select the most relevant few-shot examples for a query."""
     qtype = classify_query(query)
-    examples = EXAMPLES.get(qtype, EXAMPLES["factual"])
+    source = EXAMPLES_EN if lang == "en" else EXAMPLES
+    examples = source.get(qtype, source["factual"])
     return examples[:max_examples]
 
 
-def format_few_shot_block(examples: list[dict]) -> str:
+def format_few_shot_block(examples: list[dict], lang: str = "de") -> str:
     """Format few-shot examples for injection into the system prompt."""
     if not examples:
         return ""
+    q_label = "Question" if lang == "en" else "Frage"
+    a_label = "Answer" if lang == "en" else "Antwort"
     blocks = []
     for ex in examples:
-        blocks.append(f"**Frage:** {ex['q']}\n**Antwort:** {ex['a']}")
+        blocks.append(f"**{q_label}:** {ex['q']}\n**{a_label}:** {ex['a']}")
     return "\n\n".join(blocks)

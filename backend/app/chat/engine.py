@@ -12,7 +12,7 @@ from openai import AsyncAzureOpenAI
 
 from app.chat.citations import extract_used_citation_indices, normalize_citation_markers, strip_for_display
 from app.chat.few_shot import classify_query
-from app.chat.prompts import NO_INFO_FALLBACK, build_context, build_system_prompt, build_user_prompt, _short_doc_label
+from app.chat.prompts import build_no_info_fallback, build_context, build_system_prompt, build_user_prompt, _short_doc_label, detect_response_language
 from app.config import settings
 from app.models import ChatMessage, Citation
 from app.search.retriever import RetrievalResult, retrieve, retrieve_web, retrieve_combined
@@ -338,11 +338,18 @@ _DOMAIN_CLASSIFIER_SYSTEM = (
     "general trivia, programming help, weather, sports results)."
 )
 
-_OFF_TOPIC_RESPONSE = (
-    "I am the campusLMU Study Assistant and can help with questions about "
-    "studying at LMU — regulations, enrollment, fees, deadlines, campus services, and more. "
-    "This question seems outside my scope. Could you rephrase it in relation to your studies?"
-)
+def _build_off_topic_response(lang: str = "de") -> str:
+    if lang == "en":
+        return (
+            "I am the campusLMU Study Assistant and can help with questions about "
+            "studying at LMU — regulations, enrollment, fees, deadlines, campus services, and more. "
+            "This question seems outside my scope. Could you rephrase it in relation to your studies?"
+        )
+    return (
+        "Ich bin der campusLMU Studienassistent und helfe bei Fragen rund ums Studium an der LMU — "
+        "Prüfungsordnungen, Einschreibung, Gebühren, Fristen, Campusservices und mehr. "
+        "Diese Frage scheint außerhalb meines Bereichs zu liegen. Kannst du sie in Bezug auf dein Studium umformulieren?"
+    )
 
 
 _IN_DOMAIN_KEYWORDS = re.compile(
@@ -360,7 +367,11 @@ _IN_DOMAIN_KEYWORDS = re.compile(
     r"|semestertermin|seniorenstudium|gaststudierende|zweitstudium"
     r"|doppelstudium|promotion|lehramt|quereinstieg|ortswechsel"
     r"|behinderung|beeinträchtigung|bescheinigung|fachwechsel"
-    r"|hochschulzugang|bewerbung|uni|universität|lmu)",
+    r"|hochschulzugang|bewerbung|uni|universität|lmu"
+    r"|wohnung|wohnen|wohnheim|studierendenwerk|mensa|bafög|bafoeg"
+    r"|eduroam|wlan|wifi|vpn|it.?service|lmu.?account"
+    r"|housing|dormitory|cafeteria|financial\s*aid"
+    r"|visa|aufenthalts|international\s*office)",
     re.IGNORECASE,
 )
 
@@ -482,7 +493,8 @@ async def chat_stream(
     timing["rewrite_ms"] = round((time.perf_counter() - t0) * 1000, 1)
 
     if not in_domain:
-        yield _sse("token", {"content": _OFF_TOPIC_RESPONSE})
+        lang = detect_response_language(message, history)
+        yield _sse("token", {"content": _build_off_topic_response(lang)})
         yield _sse("citations", {"citations": []})
         yield _sse("done", {})
         return
@@ -520,7 +532,15 @@ async def chat_stream(
     citations = result.citations
 
     if not citations:
-        yield _sse("token", {"content": NO_INFO_FALLBACK})
+        lang = detect_response_language(message, history)
+        fallback = build_no_info_fallback(
+            query=search_query,
+            route=route.value,
+            query_type=query_type,
+            lang=lang,
+            program_name=program_name,
+        )
+        yield _sse("token", {"content": fallback})
         yield _sse("citations", {"citations": []})
         yield _sse("done", {})
         return
@@ -544,7 +564,13 @@ async def chat_stream(
 
     # 5. Build messages array with token-aware history trimming
     content_types = {c.doc_type for c in citations}
-    system_prompt = build_system_prompt(message, history, content_types=content_types)
+    system_prompt = build_system_prompt(
+        message, history,
+        content_types=content_types,
+        route=route.value,
+        query_type=query_type,
+        program_name=program_name,
+    )
     system_tokens = _count_tokens(system_prompt)
     context_tokens = _count_tokens(user_prompt)
     trimmed_history = _trim_history(history, system_tokens, context_tokens)
