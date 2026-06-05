@@ -41,6 +41,7 @@ interface UseChatReturn {
   isStreaming: boolean;
   error: string | null;
   programName: string | null;
+  detectedLang: string | null;
   setProgramName: (name: string | null) => void;
   sendMessage: (content: string) => Promise<void>;
   stopStreaming: () => void;
@@ -53,6 +54,7 @@ export function useChat(): UseChatReturn {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [programName, setProgramName] = useState<string | null>(null);
+  const [detectedLang, setDetectedLang] = useState<string | null>(null);
 
   useEffect(() => {
     setMessages(loadStoredMessages());
@@ -70,6 +72,7 @@ export function useChat(): UseChatReturn {
   const bufferRef = useRef("");
   const fullContentRef = useRef("");
   const lastHintedProgramRef = useRef<string | null>(null);
+  const detectedLangRef = useRef<string | null>(null);
 
   useEffect(() => {
     try {
@@ -228,12 +231,15 @@ export function useChat(): UseChatReturn {
                 }
                 return updated;
               });
+            } else if (type === "language" && parsed.lang) {
+              detectedLangRef.current = parsed.lang;
+              setDetectedLang(parsed.lang);
             } else if (type === "detected_program" && parsed.program_name) {
               setProgramName(parsed.program_name);
               // Show a system hint if this is a new program detection
               if (parsed.program_name !== lastHintedProgramRef.current) {
                 lastHintedProgramRef.current = parsed.program_name;
-                const isEnglish = /^(?:what|how|when|where|who|why|which|can|could|do|does|is|are|tell|please|i\b)/i.test(content);
+                const isEnglish = detectedLangRef.current === "en";
                 const hintText = isEnglish
                   ? `Answering for the program **${parsed.program_name}**. If you mean a different program, select it from the dropdown above.`
                   : `Antwort für den Studiengang **${parsed.program_name}**. Falls du einen anderen Studiengang meinst, wähle ihn oben im Dropdown aus.`;
@@ -363,5 +369,5 @@ export function useChat(): UseChatReturn {
     sendMessage(lastUserContent);
   }, [sendMessage]);
 
-  return { messages, isStreaming, error, programName, setProgramName, sendMessage, stopStreaming, clearMessages, retryLast };
+  return { messages, isStreaming, error, programName, detectedLang, setProgramName, sendMessage, stopStreaming, clearMessages, retryLast };
 }

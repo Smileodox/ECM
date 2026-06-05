@@ -10,7 +10,7 @@ import { CitationDrawer } from "./CitationDrawer";
 import { TypingIndicator } from "./TypingIndicator";
 
 export function ChatWindow() {
-  const { messages, isStreaming, error, programName, setProgramName, sendMessage, stopStreaming, clearMessages, retryLast } =
+  const { messages, isStreaming, error, programName, detectedLang, setProgramName, sendMessage, stopStreaming, clearMessages, retryLast } =
     useChat();
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(
     null
@@ -177,6 +177,7 @@ export function ChatWindow() {
                 lastUserMessage={lastUserMsg}
                 onSendMessage={sendMessage}
                 isSystemHint={msg.isSystemHint}
+                detectedLang={detectedLang}
               />
             );
           })}

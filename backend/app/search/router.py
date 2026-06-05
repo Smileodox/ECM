@@ -69,7 +69,7 @@ _ROUTER_SYSTEM = (
 )
 
 
-async def classify_query(query: str) -> QueryRoute:
+async def classify_route(query: str) -> QueryRoute:
     """Classify a query into a routing category. Uses keyword fast-path, falls back to LLM."""
     has_regulation = bool(_REGULATION_KEYWORDS.search(query))
     has_general = bool(_GENERAL_KEYWORDS.search(query))

@@ -16,7 +16,7 @@ from app.chat.prompts import build_no_info_fallback, build_context, build_system
 from app.config import settings
 from app.models import ChatMessage, Citation
 from app.search.retriever import RetrievalResult, retrieve, retrieve_web, retrieve_combined
-from app.search.router import QueryRoute, classify_query as classify_route
+from app.search.router import QueryRoute, classify_route
 
 logger = logging.getLogger(__name__)
 
@@ -520,6 +520,9 @@ async def chat_stream(
         result = await retrieve_combined(
             search_query, doc_type=doc_type, program_name=program_name, query_type=query_type,
         )
+        if not result.citations and (doc_type or program_name):
+            result = await retrieve_combined(search_query, query_type=query_type)
+            result.low_confidence = True
     else:  # REGULATION
         result = await retrieve(search_query, doc_type=doc_type, program_name=program_name, query_type=query_type)
         if doc_type and not result.citations:
@@ -581,7 +584,11 @@ async def chat_stream(
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": user_prompt})
 
-    # 6. Send preliminary citation map so frontend can render chips during streaming
+    # 6a. Send detected language so frontend can localize UI without guessing
+    lang = detect_response_language(message, history)
+    yield _sse("language", {"lang": lang})
+
+    # 6b. Send preliminary citation map so frontend can render chips during streaming
     pre_citation_map = {
         c.index: {
             "index": c.index,

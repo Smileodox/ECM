@@ -830,7 +830,7 @@ async def _web_search_hybrid(
         raise
 
 
-async def _web_search_bm25(search_query: str, top_k: int) -> list[tuple[float, dict]]:
+async def _web_search_keyword_reranked(search_query: str, top_k: int) -> list[tuple[float, dict]]:
     client = _get_web_search_client()
     try:
         results = await client.search(
@@ -893,7 +893,7 @@ async def retrieve_web(
     t2 = time.perf_counter()
     hybrid_results, bm25_results = await asyncio.gather(
         _web_search_hybrid(search_query, query_vector, top_k),
-        _web_search_bm25(search_query, top_k),
+        _web_search_keyword_reranked(search_query, top_k),
     )
     timing["search_ms"] = round((time.perf_counter() - t2) * 1000, 1)
 
@@ -928,15 +928,31 @@ async def retrieve_combined(
     program_name: str | None = None,
     query_type: str | None = None,
 ) -> RetrievalResult:
-    """Retrieve from BOTH regulation and web indices, merge with RRF."""
+    """Retrieve from BOTH regulation and web indices, merge with RRF.
+
+    Scores from different indices are not directly comparable, so we use
+    rank-based RRF fusion instead of raw score sorting.
+    """
     reg_result, web_result = await asyncio.gather(
         retrieve(query, top_k=top_k, doc_type=doc_type, program_name=program_name, query_type=query_type),
         retrieve_web(query, top_k=top_k),
     )
 
-    all_citations = reg_result.citations + web_result.citations
-    all_citations.sort(key=lambda c: c.reranker_score, reverse=True)
-    all_citations = all_citations[:top_k]
+    # Build ranked lists keyed by source_url (unique across indices)
+    reg_ranked = [(c.reranker_score, {"_citation": c}) for c in reg_result.citations]
+    web_ranked = [(c.reranker_score, {"_citation": c}) for c in web_result.citations]
+
+    scores: dict[int, float] = {}
+    citation_by_id: dict[int, Citation] = {}
+    for ranked_list in [reg_ranked, web_ranked]:
+        for rank, (_, entry) in enumerate(ranked_list):
+            c = entry["_citation"]
+            cid = id(c)
+            scores[cid] = scores.get(cid, 0) + 1.0 / (RRF_K + rank + 1)
+            citation_by_id[cid] = c
+
+    merged = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    all_citations = [citation_by_id[cid] for cid, _ in merged][:top_k]
 
     for i, c in enumerate(all_citations, 1):
         c.index = i

@@ -12,6 +12,7 @@ interface MessageBubbleProps {
   lastUserMessage?: string;
   onSendMessage?: (text: string) => void;
   isSystemHint?: boolean;
+  detectedLang?: string | null;
 }
 
 function buildPreCitation(info: PreCitationInfo): Citation {
@@ -150,14 +151,10 @@ function renderInline(text: string) {
 }
 
 
-function isGermanResponse(content: string): boolean {
-  return /[äöüßÄÖÜ]/.test(content) || /\b(?:die|der|das|und|ist|für|bei|des)\b/i.test(content.slice(0, 100));
-}
-
-function getFollowUpSuggestions(content: string, userQuestion: string): string[] {
+function getFollowUpSuggestions(content: string, userQuestion: string, lang: string | null | undefined): string[] {
   const lower = content.toLowerCase();
   const qLower = userQuestion.toLowerCase();
-  const de = isGermanResponse(content);
+  const de = lang ? lang !== "en" : (/[äöüßÄÖÜ]/.test(content) || /\b(?:die|der|das|und|ist|für|bei|des)\b/i.test(content.slice(0, 100)));
   if (/masterarbeit|master.?s?\s*thesis/i.test(lower) && !/masterarbeit|thesis/i.test(qLower)) {
     return de
       ? ["Wie melde ich mich zur Masterarbeit an?", "Kann ich die Bearbeitungszeit verlängern?"]
@@ -198,6 +195,7 @@ export function MessageBubble({
   lastUserMessage,
   onSendMessage,
   isSystemHint,
+  detectedLang,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const [feedbackGiven, setFeedbackGiven] = useState<"up" | "down" | null>(null);
@@ -216,8 +214,8 @@ export function MessageBubble({
   );
 
   const suggestions = useMemo(
-    () => (!isUser && !isStreaming && !isSystemHint && message.content ? getFollowUpSuggestions(message.content, lastUserMessage || "") : []),
-    [isUser, isStreaming, isSystemHint, message.content, lastUserMessage]
+    () => (!isUser && !isStreaming && !isSystemHint && message.content ? getFollowUpSuggestions(message.content, lastUserMessage || "", detectedLang) : []),
+    [isUser, isStreaming, isSystemHint, message.content, lastUserMessage, detectedLang]
   );
 
   if (isUser) {
