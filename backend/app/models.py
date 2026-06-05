@@ -42,3 +42,4 @@ class FeedbackRequest(BaseModel):
     rating: Literal["up", "down"]
     comment: str = Field(default="", max_length=2000)
     query: str = Field(default="", max_length=2000)
+    response: str = Field(default="", max_length=10_000)

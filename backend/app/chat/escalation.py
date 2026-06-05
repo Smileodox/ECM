@@ -98,11 +98,15 @@ _FACULTY_FSB_URLS: dict[str, list[str]] = {
         "Wirtschaftspädagogik I",
         "Wirtschaftspädagogik mit integriertem Wahlfach (Wirtschaftspädagogik II)",
     ],
-    "https://www.jura.lmu.de/de/studium/fachstudienberatung/": [],
+    "https://www.jura.lmu.de/de/studium/fachstudienberatung/": [
+        "Rechtswissenschaften",
+    ],
     "https://www.med.lmu.de/de/studium/kontakt/": [
         "International Health", "Public Health", "Epidemiologie",
     ],
-    "https://www.vetmed.lmu.de/studium/a_bis_z/fachstudienberat/index.html": [],
+    "https://www.vetmed.lmu.de/studium/a_bis_z/fachstudienberat/index.html": [
+        "Tiermedizin",
+    ],
     "https://www.lmu.de/kunstwissenschaften/de/studium/studienberatung/": [
         "Kunstgeschichte", "Spätantike und Byzantinische Kunstgeschichte",
         "Geschichte", "Klassische Archäologie",
@@ -151,8 +155,12 @@ _FACULTY_FSB_URLS: dict[str, list[str]] = {
         "Journalism, Media and Globalisation", "Strategische Kommunikation",
         "Computational Social Science",
     ],
-    "https://www.evtheol.lmu.de/de/die-fakultaet/ansprechpartner-innen-und-kontakt/": [],
-    "https://www.kaththeol.lmu.de/de/studium/beratung-und-services/": [],
+    "https://www.evtheol.lmu.de/de/die-fakultaet/ansprechpartner-innen-und-kontakt/": [
+        "Evangelische Theologie",
+    ],
+    "https://www.kaththeol.lmu.de/de/studium/beratung-und-services/": [
+        "Katholische Theologie",
+    ],
 }
 
 _FSB_OVERVIEW_URL = "https://www.lmu.de/de/workspace-fuer-studierende/1x1-des-studiums/fachstudienberatung/"

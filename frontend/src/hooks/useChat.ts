@@ -233,10 +233,14 @@ export function useChat(): UseChatReturn {
               // Show a system hint if this is a new program detection
               if (parsed.program_name !== lastHintedProgramRef.current) {
                 lastHintedProgramRef.current = parsed.program_name;
+                const isEnglish = /^(?:what|how|when|where|who|why|which|can|could|do|does|is|are|tell|please|i\b)/i.test(content);
+                const hintText = isEnglish
+                  ? `Answering for the program **${parsed.program_name}**. If you mean a different program, select it from the dropdown above.`
+                  : `Antwort für den Studiengang **${parsed.program_name}**. Falls du einen anderen Studiengang meinst, wähle ihn oben im Dropdown aus.`;
                 const hintMsg: ChatMessage = {
                   id: genMsgId(),
                   role: "assistant",
-                  content: `Answering for the program **${parsed.program_name}**. If you mean a different program, select it from the dropdown above.`,
+                  content: hintText,
                   isSystemHint: true,
                 };
                 setMessages((prev) => {

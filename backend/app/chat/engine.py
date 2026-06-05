@@ -12,7 +12,7 @@ from openai import AsyncAzureOpenAI
 
 from app.chat.citations import extract_used_citation_indices, normalize_citation_markers, strip_for_display
 from app.chat.few_shot import classify_query
-from app.chat.prompts import build_no_info_fallback, build_context, build_system_prompt, build_user_prompt, _short_doc_label, detect_response_language
+from app.chat.prompts import build_no_info_fallback, build_context, build_system_prompt, build_user_prompt, short_doc_label, detect_response_language
 from app.config import settings
 from app.models import ChatMessage, Citation
 from app.search.retriever import RetrievalResult, retrieve, retrieve_web, retrieve_combined
@@ -21,8 +21,9 @@ from app.search.router import QueryRoute, classify_query as classify_route
 logger = logging.getLogger(__name__)
 
 _PROGRAM_NAMES: list[str] | None = None
-_enc = tiktoken.encoding_for_model("gpt-4o")
+_enc = tiktoken.get_encoding("o200k_base")
 MAX_CONTEXT_TOKENS = 8000
+RESPONSE_TOKEN_RESERVE = 2500
 
 
 @lru_cache(maxsize=1)
@@ -437,7 +438,7 @@ def _count_tokens(text: str) -> int:
 
 
 def _trim_history(history: list[ChatMessage], system_tokens: int, context_tokens: int) -> list[ChatMessage]:
-    budget = settings.model_context_limit - system_tokens - context_tokens - 2500
+    budget = settings.model_context_limit - system_tokens - context_tokens - RESPONSE_TOKEN_RESERVE
     if budget <= 0:
         logger.warning(
             "Context budget exhausted (system=%d, context=%d, limit=%d), dropping all history",
@@ -587,7 +588,7 @@ async def chat_stream(
             "section_id": c.section_id,
             "section_title": c.section_title,
             "absatz": c.absatz,
-            "doc_name": _short_doc_label(c) if c.doc_type != "web_1x1" else c.doc_name,
+            "doc_name": short_doc_label(c) if c.doc_type != "web_1x1" else c.doc_name,
             "doc_type": c.doc_type,
         }
         for c in citations
@@ -635,7 +636,7 @@ async def chat_stream(
             "section_title": c.section_title,
             "absatz": c.absatz,
             "page_number": c.page_number,
-            "doc_name": _short_doc_label(c) if c.doc_type != "web_1x1" else c.doc_name,
+            "doc_name": short_doc_label(c) if c.doc_type != "web_1x1" else c.doc_name,
             "source_url": c.source_url,
             "content": strip_for_display(c.content),
             "doc_type": c.doc_type,

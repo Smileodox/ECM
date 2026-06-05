@@ -267,7 +267,7 @@ _DOC_TYPE_LABELS = {
 }
 
 
-def _short_doc_label(c) -> str:
+def short_doc_label(c) -> str:
     """Build a concise document label like 'Informatik PSTO (2023)' instead of the full legal title."""
     doc_type = getattr(c, "doc_type", "")
     doc_type_label = _DOC_TYPE_LABELS.get(doc_type, "")
@@ -297,7 +297,7 @@ def _build_citation_header(c) -> str:
         location += f", {c.absatz}"
     location += f", S. {c.page_number}"
 
-    doc_label = _short_doc_label(c)
+    doc_label = short_doc_label(c)
 
     return f"[Quelle {c.index}: {location} | {doc_label}]"
 

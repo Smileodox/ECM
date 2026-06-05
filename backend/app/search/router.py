@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import re
 from enum import Enum
+from functools import lru_cache
 
 import httpx
 from openai import AsyncAzureOpenAI
@@ -86,14 +87,19 @@ async def classify_query(query: str) -> QueryRoute:
     return await _llm_classify(query)
 
 
+@lru_cache(maxsize=1)
+def _get_openai_client() -> AsyncAzureOpenAI:
+    return AsyncAzureOpenAI(
+        azure_endpoint=settings.azure_openai_endpoint,
+        api_key=settings.azure_openai_api_key,
+        api_version=settings.azure_openai_api_version,
+        timeout=httpx.Timeout(10.0, connect=5.0),
+    )
+
+
 async def _llm_classify(query: str) -> QueryRoute:
     try:
-        client = AsyncAzureOpenAI(
-            azure_endpoint=settings.azure_openai_endpoint,
-            api_key=settings.azure_openai_api_key,
-            api_version=settings.azure_openai_api_version,
-            timeout=httpx.Timeout(10.0, connect=5.0),
-        )
+        client = _get_openai_client()
         response = await client.chat.completions.create(
             model=settings.azure_openai_mini_deployment,
             messages=[

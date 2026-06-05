@@ -128,11 +128,15 @@ def _get_search_client() -> SearchClient:
 
 
 async def close_search_client() -> None:
-    global _search_client, _search_client_created
+    global _search_client, _search_client_created, _web_search_client, _web_search_client_created
     if _search_client is not None:
         await _search_client.close()
         _search_client = None
         _search_client_created = 0
+    if _web_search_client is not None:
+        await _web_search_client.close()
+        _web_search_client = None
+        _web_search_client_created = 0
 
 
 _RETRY = retry(
@@ -596,7 +600,7 @@ async def _fetch_neighbor_chunks(citations: list[Citation]) -> list[Citation]:
         logger.warning("Neighbor chunk fetch failed, continuing without expansion", exc_info=True)
         return citations
 
-    enc = _tiktoken.encoding_for_model("gpt-4o")
+    enc = _tiktoken.get_encoding("o200k_base")
 
     for c, chunk_idx in targets:
         expanded_parts = []

@@ -10,7 +10,7 @@ interface CitationChipProps {
 export function CitationChip({ citation, onClick }: CitationChipProps) {
   const isWeb = citation.doc_type === "web_1x1";
   const label = isWeb
-    ? (citation.section_title || citation.doc_name || "LMU")
+    ? `Quelle ${citation.index}`
     : citation.absatz
       ? `${citation.section_id}, ${citation.absatz}`
       : citation.section_id;
