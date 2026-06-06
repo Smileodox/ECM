@@ -35,6 +35,11 @@ AENDERUNG_TITLE_PATTERN = re.compile(
 AENDERUNG_MODIFIED_SECTIONS_PATTERN = re.compile(
     r"§\s*(\d+)\s+(?:erhält|wird|entfällt|lautet)", re.IGNORECASE,
 )
+# Matches Anlage headings like: ## **Anlage 2 - Module, Lehrveranstaltungen, ...**
+ANLAGE_HEADING_PATTERN = re.compile(
+    r"^##\s+\*\*Anlage\s*(\d*)\s*[-–:]\s*(.+?)\*\*\s*$",
+    re.MULTILINE,
+)
 
 MAX_CHUNK_TOKENS = 800
 TARGET_CHUNK_TOKENS = 600
@@ -162,8 +167,8 @@ def _page_for_offset(offset: int, boundaries: list[tuple[int, int]]) -> int:
 
 
 def _split_into_sections(full_text: str, boundaries: list[tuple[int, int]]) -> list[_SectionBlock]:
-    """Split the full text into §-section blocks."""
-    # Find all § section headings
+    """Split the full text into §-section and Anlage blocks."""
+    # Collect all section boundaries: § headings and Anlage headings
     section_starts: list[tuple[int, int, str, str, str]] = []
     # (match_start, section_num, title, heading_text, section_id)
 
@@ -175,8 +180,35 @@ def _split_into_sections(full_text: str, boundaries: list[tuple[int, int]]) -> l
         section_id = f"§{section_num}"
         section_starts.append((match.start(), section_num, title, heading, section_id))
 
+    # Also detect Anlage headings (e.g. "## **Anlage 2 - Module, ...**")
+    anlage_positions: set[int] = set()
+    for match in ANLAGE_HEADING_PATTERN.finditer(full_text):
+        anlage_num = match.group(1) or ""
+        anlage_title = match.group(2).strip()
+        heading = match.group(0).strip()
+        section_id = f"Anlage {anlage_num}".strip()
+        pos = match.start()
+        if pos not in anlage_positions:
+            anlage_positions.add(pos)
+            section_starts.append((pos, 9000 + len(anlage_positions), anlage_title, heading, section_id))
+
     if not section_starts:
         return []
+
+    section_starts.sort(key=lambda x: x[0])
+
+    # Anlage headings repeat on every page of the table — keep only the first
+    # occurrence of each Anlage id, remove duplicates before computing body spans.
+    seen_anlage: set[str] = set()
+    deduped: list[tuple[int, int, str, str, str]] = []
+    for entry in section_starts:
+        sid = entry[4]
+        if sid.startswith("Anlage"):
+            if sid in seen_anlage:
+                continue
+            seen_anlage.add(sid)
+        deduped.append(entry)
+    section_starts = deduped
 
     # Track current part context
     current_part = ""
@@ -195,6 +227,9 @@ def _split_into_sections(full_text: str, boundaries: list[tuple[int, int]]) -> l
 
         for part_match in PART_PATTERN.finditer(preceding):
             current_part = f"{part_match.group(1)}. {part_match.group(2).strip()}"
+
+        if section_id.startswith("Anlage"):
+            current_part = section_id
 
         page = _page_for_offset(pos, boundaries)
 
@@ -358,6 +393,33 @@ def _hard_split(text: str, max_tokens: int) -> list[str]:
     return chunks if chunks else [text]
 
 
+_ANLAGE_TABLE_NOISE = re.compile(
+    r"(?:"
+    r"^\*\)\s*Erläuterungen.*$"        # footnote references
+    r"|^Seite\s+\d+\s+von\s+\d+\s*$"  # page numbers
+    r"|^##\s+\*\*Anlage\s+\d.*$"       # repeated Anlage headings
+    r"|^\|---(?:\|---)*\|?\s*$"        # table separator rows
+    r"|^\|\*\*\d+\*\*\|.*$"                       # column number header rows like |**4**|**Programmname...**|
+    r"|^\|Semester\*?\|Zulassungsvoraussetzung\|" # repeated column header rows
+    r")",
+    re.MULTILINE,
+)
+_ANLAGE_CATEGORY_HEADER = re.compile(
+    r"^\|{1,2}\*\*(?:Module|Lehrveranstaltungen|Modulprüfungen).*$",
+    re.MULTILINE,
+)
+_TABLE_SEPARATOR = re.compile(r"^\|---(?:\|---)*\|?\s*$", re.MULTILINE)
+
+
+def _clean_anlage_body(body: str, doc_name: str) -> str:
+    """Remove repeated table headers and page-break noise from Anlage content."""
+    body = _ANLAGE_TABLE_NOISE.sub("", body)
+    body = _ANLAGE_CATEGORY_HEADER.sub("", body)
+    body = re.sub(r"\n{3,}", "\n\n", body)
+    preamble = f"Modulübersicht ({doc_name}):\n\n"
+    return preamble + body.strip()
+
+
 def chunk_document(
     pages: list[ParsedPage],
     doc_filename: str,
@@ -378,9 +440,17 @@ def chunk_document(
     chunk_idx = 0
 
     for section in sections:
+        if section.section_id.startswith("Anlage"):
+            section.body = _clean_anlage_body(section.body, doc_name)
+        else:
+            section.body = _TABLE_SEPARATOR.sub("", section.body)
+            section.body = re.sub(r"\n{3,}", "\n\n", section.body)
+
         tokens = count_tokens(section.body)
 
         if tokens <= MAX_CHUNK_TOKENS:
+            if tokens < 50:
+                continue
             chunks.append(Chunk(
                 content=section.body,
                 doc_name=doc_name,
@@ -404,6 +474,8 @@ def chunk_document(
             for text, absatz_label in groups:
                 sub_chunks = _hard_split(text, MAX_CHUNK_TOKENS)
                 for sc in sub_chunks:
+                    if count_tokens(sc) < 50:
+                        continue
                     chunks.append(Chunk(
                         content=sc,
                         doc_name=doc_name,

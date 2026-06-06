@@ -122,8 +122,8 @@ function renderMarkdownLine(line: string) {
 }
 
 function renderInline(text: string) {
-  // Split on bold (**...**) and markdown links ([text](url))
-  const parts = text.split(/(\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g);
+  // Split on bold (**...**), markdown links ([text](url)), and bare URLs
+  const parts = text.split(/(\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\)|https?:\/\/[^\s<>)\]]+)/g);
   return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return (
@@ -143,6 +143,20 @@ function renderInline(text: string) {
           className="text-lmu-green underline hover:text-lmu-green-dark"
         >
           {linkMatch[1]}
+        </a>
+      );
+    }
+    if (/^https?:\/\//.test(part)) {
+      const clean = part.replace(/[.,;:!?]+$/, "");
+      return (
+        <a
+          key={i}
+          href={clean}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-lmu-green underline hover:text-lmu-green-dark break-all"
+        >
+          {clean}
         </a>
       );
     }
