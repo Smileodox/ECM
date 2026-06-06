@@ -17,11 +17,14 @@ def _build_limiter() -> Limiter:
     from app.config import settings
     if settings.redis_url:
         try:
-            storage_uri = settings.redis_url
+            import redis as _redis
+            client = _redis.from_url(settings.redis_url, socket_connect_timeout=2)
+            client.ping()
+            client.close()
             return Limiter(
                 key_func=_get_client_ip,
                 default_limits=["100/minute"],
-                storage_uri=storage_uri,
+                storage_uri=settings.redis_url,
             )
         except Exception:
             logger.warning("Redis unavailable for rate limiter, using in-memory")
