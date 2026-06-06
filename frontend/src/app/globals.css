@@ -10,6 +10,13 @@
 
   --background: #fafbfc;
   --foreground: #1a1a1a;
+  --surface: #ffffff;
+  --surface-secondary: #f9fafb;
+  --border: #f3f4f6;
+  --border-strong: #e5e7eb;
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --text-muted: #9ca3af;
 
   --shadow-sm: 0 1px 2px rgba(0, 102, 51, 0.04);
   --shadow-md: 0 4px 12px rgba(0, 102, 51, 0.06);
@@ -22,9 +29,34 @@
   --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+@media (prefers-color-scheme: dark) {
+  :root {
+    --lmu-green: #22c55e;
+    --lmu-green-light: #4ade80;
+    --lmu-green-dark: #16a34a;
+    --lmu-green-50: rgba(34, 197, 94, 0.08);
+    --lmu-green-100: rgba(34, 197, 94, 0.15);
+    --lmu-green-200: rgba(34, 197, 94, 0.25);
+
+    --background: #0f1117;
+    --foreground: #f0f0f2;
+    --surface: #1c1f27;
+    --surface-secondary: #262a33;
+    --border: #2e3340;
+    --border-strong: #3d4352;
+    --text-primary: #f5f5f7;
+    --text-secondary: #e0e0e4;
+    --text-muted: #9ca3af;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+    --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.6);
+    --drawer-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
+  }
+}
+
 @theme inline {
-  --color-background: #fafbfc;
-  --color-foreground: #1a1a1a;
   --color-lmu-green: #006633;
   --color-lmu-green-light: #00804a;
   --color-lmu-green-dark: #004d26;
@@ -35,13 +67,44 @@
   --font-mono: var(--font-geist-mono);
 }
 
+@media (prefers-color-scheme: dark) {
+  @theme inline {
+    --color-lmu-green: #22c55e;
+    --color-lmu-green-light: #4ade80;
+    --color-lmu-green-dark: #16a34a;
+    --color-lmu-green-50: rgba(34, 197, 94, 0.08);
+    --color-lmu-green-100: rgba(34, 197, 94, 0.15);
+    --color-lmu-green-200: rgba(34, 197, 94, 0.25);
+  }
+}
+
 html,
 body {
   height: 100%;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  color-scheme: light dark;
 }
+
+/* Semantic color utilities — CSS-only, no @theme dependency */
+.bg-surface { background-color: var(--surface) !important; }
+.bg-surface\/80 { background-color: color-mix(in srgb, var(--surface) 80%, transparent) !important; }
+.bg-surface-secondary { background-color: var(--surface-secondary) !important; }
+.border-border-default { border-color: var(--border) !important; }
+.border-border-strong { border-color: var(--border-strong) !important; }
+.text-text-primary { color: var(--text-primary) !important; }
+.text-text-secondary { color: var(--text-secondary) !important; }
+.text-text-muted { color: var(--text-muted) !important; }
+.bg-text-primary { background-color: var(--text-primary) !important; }
+.text-background { color: var(--background) !important; }
+.bg-border-strong { background-color: var(--border-strong) !important; }
+.text-border-strong { color: var(--border-strong) !important; }
+.disabled\:bg-border-strong:disabled { background-color: var(--border-strong) !important; }
+.disabled\:from-border-strong:disabled { --tw-gradient-from: var(--border-strong); }
+.disabled\:to-border-strong:disabled { --tw-gradient-to: var(--border-strong); }
+.disabled\:text-text-muted:disabled { color: var(--text-muted) !important; }
+.focus-within\:border-lmu-green:focus-within { border-color: var(--lmu-green); }
 
 /* Scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
@@ -51,11 +114,11 @@ body {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(0, 102, 51, 0.15);
+  background: color-mix(in srgb, var(--lmu-green) 15%, transparent);
   border-radius: 3px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 102, 51, 0.25);
+  background: color-mix(in srgb, var(--lmu-green) 25%, transparent);
 }
 
 /* Keyframes */
@@ -95,13 +158,13 @@ body {
 }
 
 @keyframes chipHighlight {
-  0% { background-color: rgba(0, 102, 51, 0.15); }
-  100% { background-color: rgba(0, 102, 51, 0.05); }
+  0% { background-color: color-mix(in srgb, var(--lmu-green) 15%, transparent); }
+  100% { background-color: color-mix(in srgb, var(--lmu-green) 5%, transparent); }
 }
 
 @keyframes gentlePulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 102, 51, 0.2); }
-  50% { box-shadow: 0 0 0 8px rgba(0, 102, 51, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--lmu-green) 20%, transparent); }
+  50% { box-shadow: 0 0 0 8px transparent; }
 }
 
 /* Animation classes */
@@ -143,7 +206,7 @@ body {
   display: inline-block;
   width: 2px;
   height: 1em;
-  background-color: #006633;
+  background-color: var(--lmu-green);
   margin-left: 2px;
   vertical-align: text-bottom;
   animation: cursorBlink 1s step-end infinite;
@@ -163,10 +226,20 @@ body {
   backdrop-filter: blur(12px);
   background-color: rgba(255, 255, 255, 0.85) !important;
 }
+@media (prefers-color-scheme: dark) {
+  .header-scrolled {
+    background-color: rgba(26, 29, 36, 0.85) !important;
+  }
+}
 
 /* Background gradient */
 .lmu-gradient-bg {
   background: linear-gradient(180deg, #f0faf4 0%, #fafbfc 30%, #ffffff 100%);
+}
+@media (prefers-color-scheme: dark) {
+  .lmu-gradient-bg {
+    background: linear-gradient(180deg, var(--background) 0%, var(--surface) 100%);
+  }
 }
 
 /* Reduced motion */

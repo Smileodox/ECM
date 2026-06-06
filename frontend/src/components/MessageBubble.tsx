@@ -12,6 +12,7 @@ interface MessageBubbleProps {
   lastUserMessage?: string;
   onSendMessage?: (text: string) => void;
   isSystemHint?: boolean;
+  detectedLang?: string | null;
 }
 
 function buildPreCitation(info: PreCitationInfo): Citation {
@@ -92,7 +93,7 @@ function renderMarkdownLine(line: string) {
           : level === 3
             ? "text-sm font-semibold mt-3 mb-1 text-text-secondary"
             : "text-sm font-medium mt-2 text-text-secondary";
-    return <div className={className}>{renderBold(text)}</div>;
+    return <div className={className}>{renderInline(text)}</div>;
   }
 
   const bulletMatch = line.match(/^(\s*[-*])\s+(.*)$/);
@@ -100,7 +101,7 @@ function renderMarkdownLine(line: string) {
     return (
       <span className="flex gap-2.5 ml-1 py-0.5">
         <span className="text-lmu-green select-none">•</span>
-        <span>{renderBold(bulletMatch[2])}</span>
+        <span>{renderInline(bulletMatch[2])}</span>
       </span>
     );
   }
@@ -112,12 +113,12 @@ function renderMarkdownLine(line: string) {
         <span className="text-text-muted select-none min-w-[1.5em] text-right tabular-nums">
           {numberedMatch[1]}.
         </span>
-        <span>{renderBold(numberedMatch[2])}</span>
+        <span>{renderInline(numberedMatch[2])}</span>
       </span>
     );
   }
 
-  return renderBold(line);
+  return renderInline(line);
 }
 
 function renderInline(text: string) {
@@ -149,25 +150,34 @@ function renderInline(text: string) {
   });
 }
 
-/** @deprecated Use renderInline instead — kept as alias for compatibility */
-const renderBold = renderInline;
 
-function getFollowUpSuggestions(content: string, userQuestion: string): string[] {
+function getFollowUpSuggestions(content: string, userQuestion: string, lang: string | null | undefined): string[] {
   const lower = content.toLowerCase();
   const qLower = userQuestion.toLowerCase();
+  const de = lang ? lang !== "en" : (/[äöüßÄÖÜ]/.test(content) || /\b(?:die|der|das|und|ist|für|bei|des)\b/i.test(content.slice(0, 100)));
   if (/masterarbeit|master.?s?\s*thesis/i.test(lower) && !/masterarbeit|thesis/i.test(qLower)) {
-    return ["How do I register for the master's thesis?", "Can I extend the master's thesis deadline?"];
+    return de
+      ? ["Wie melde ich mich zur Masterarbeit an?", "Kann ich die Bearbeitungszeit verlängern?"]
+      : ["How do I register for the master's thesis?", "Can I extend the master's thesis deadline?"];
   }
   if (/ects|credits?/i.test(lower) && !/ects|credits?/i.test(qLower)) {
-    return ["Which modules are mandatory?", "How is the grade calculated?"];
+    return de
+      ? ["Welche Module sind Pflicht?", "Wie wird die Note berechnet?"]
+      : ["Which modules are mandatory?", "How is the grade calculated?"];
   }
   if (/wiederholung|nicht bestanden|fail|repeat/i.test(lower)) {
-    return ["How many attempts do I have?", "What happens if I permanently fail?"];
+    return de
+      ? ["Wie viele Versuche habe ich?", "Was passiert bei endgültigem Nichtbestehen?"]
+      : ["How many attempts do I have?", "What happens if I permanently fail?"];
   }
   if (/eignung|zulassung|admission|eligib/i.test(lower)) {
-    return ["What documents do I need?", "What is the application deadline?"];
+    return de
+      ? ["Welche Unterlagen brauche ich?", "Wann ist die Bewerbungsfrist?"]
+      : ["What documents do I need?", "What is the application deadline?"];
   }
-  return ["Tell me more about this", "What other regulations apply?"];
+  return de
+    ? ["Erzähl mir mehr dazu", "Welche weiteren Regelungen gibt es?"]
+    : ["Tell me more about this", "What other regulations apply?"];
 }
 
 function ThumbsUpIcon({ filled }: { filled?: boolean }) {
@@ -185,6 +195,7 @@ export function MessageBubble({
   lastUserMessage,
   onSendMessage,
   isSystemHint,
+  detectedLang,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const [feedbackGiven, setFeedbackGiven] = useState<"up" | "down" | null>(null);
@@ -203,8 +214,8 @@ export function MessageBubble({
   );
 
   const suggestions = useMemo(
-    () => (!isUser && !isStreaming && !isSystemHint && message.content ? getFollowUpSuggestions(message.content, lastUserMessage || "") : []),
-    [isUser, isStreaming, isSystemHint, message.content, lastUserMessage]
+    () => (!isUser && !isStreaming && !isSystemHint && message.content ? getFollowUpSuggestions(message.content, lastUserMessage || "", detectedLang) : []),
+    [isUser, isStreaming, isSystemHint, message.content, lastUserMessage, detectedLang]
   );
 
   if (isUser) {
@@ -222,7 +233,7 @@ export function MessageBubble({
   const handleFeedback = (rating: "up" | "down") => {
     if (feedbackGiven) return;
     setFeedbackGiven(rating);
-    submitFeedback(rating, lastUserMessage || "").catch(() => {});
+    submitFeedback(rating, lastUserMessage || "", message.content).catch(() => {});
   };
 
   return (

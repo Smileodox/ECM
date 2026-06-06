@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     azure_search_endpoint: str
     azure_search_key: str
     azure_search_index_name: str = "campuslmu-regulations-v2"
+    azure_search_web_index_name: str = "campuslmu-web-v1"
 
     # Retrieval tuning
     reranker_min_score: float = 0.8

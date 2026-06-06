@@ -35,7 +35,7 @@ logger.info("Parsed %d documents in %.1fs", len(parsed_docs), time.time() - t0)
 # 2. Load manifest metadata
 url_map: dict[str, str] = {}
 doc_type_map: dict[str, str] = {}
-program_map: dict[str, str] = {}
+program_map: dict[str, list[str]] = {}
 
 if manifest_path.exists():
     manifest = json.loads(manifest_path.read_text())
@@ -43,8 +43,7 @@ if manifest_path.exists():
         fn = entry["filename"]
         url_map[fn] = entry["source_url"]
         doc_type_map[fn] = entry.get("doc_type", "")
-        programs = entry.get("programs", [])
-        program_map[fn] = programs[0] if programs else ""
+        program_map[fn] = entry.get("programs", [])
     logger.info("Loaded manifest: %d entries", len(manifest["entries"]))
 
 # 3. Chunk all documents

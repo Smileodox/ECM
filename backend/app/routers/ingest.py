@@ -49,7 +49,7 @@ def _run_ingest(docs_dir: Path) -> IngestResponse:
     manifest_path = docs_dir / "manifest.json"
     url_map: dict[str, str] = {}
     doc_type_map: dict[str, str] = {}
-    program_map: dict[str, str] = {}
+    program_map: dict[str, list[str]] = {}
 
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text())
@@ -57,8 +57,7 @@ def _run_ingest(docs_dir: Path) -> IngestResponse:
             fn = entry["filename"]
             url_map[fn] = entry["source_url"]
             doc_type_map[fn] = entry.get("doc_type", "")
-            programs = entry.get("programs", [])
-            program_map[fn] = programs[0] if programs else ""
+            program_map[fn] = entry.get("programs", [])
     else:
         url_map = {fn: f"{settings.lmu_cdn_base_url}/{fn}" for fn in parsed_docs}
 

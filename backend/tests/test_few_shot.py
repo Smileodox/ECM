@@ -57,6 +57,24 @@ class TestGetFewShotExamples:
             assert "a" in ex
 
 
+class TestGetFewShotExamplesEnglish:
+    def test_returns_english_examples(self):
+        examples = get_few_shot_examples("How many ECTS?", lang="en")
+        assert isinstance(examples, list)
+        assert len(examples) > 0
+        assert any("ECTS" in ex["q"] for ex in examples)
+
+    def test_english_examples_contain_german_terms(self):
+        examples = get_few_shot_examples("How do I register?", lang="en")
+        combined = " ".join(ex["a"] for ex in examples)
+        assert "(" in combined
+
+    def test_default_is_german(self):
+        examples_de = get_few_shot_examples("Wie viele ECTS?")
+        examples_en = get_few_shot_examples("Wie viele ECTS?", lang="en")
+        assert examples_de[0]["q"] != examples_en[0]["q"]
+
+
 class TestFormatFewShotBlock:
     def test_empty(self):
         assert format_few_shot_block([]) == ""
@@ -66,3 +84,9 @@ class TestFormatFewShotBlock:
         assert "**Frage:**" in block
         assert "**Antwort:**" in block
         assert "Test?" in block
+
+    def test_english_labels(self):
+        block = format_few_shot_block([{"q": "Test?", "a": "Answer."}], lang="en")
+        assert "**Question:**" in block
+        assert "**Answer:**" in block
+        assert "**Frage:**" not in block

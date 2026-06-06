@@ -12,16 +12,18 @@ from openai import AsyncAzureOpenAI
 
 from app.chat.citations import extract_used_citation_indices, normalize_citation_markers, strip_for_display
 from app.chat.few_shot import classify_query
-from app.chat.prompts import NO_INFO_FALLBACK, build_context, build_system_prompt, build_user_prompt
+from app.chat.prompts import build_no_info_fallback, build_context, build_system_prompt, build_user_prompt, short_doc_label, detect_response_language
 from app.config import settings
 from app.models import ChatMessage, Citation
-from app.search.retriever import RetrievalResult, retrieve
+from app.search.retriever import RetrievalResult, retrieve, retrieve_web, retrieve_combined
+from app.search.router import QueryRoute, classify_route
 
 logger = logging.getLogger(__name__)
 
 _PROGRAM_NAMES: list[str] | None = None
-_enc = tiktoken.encoding_for_model("gpt-4o")
+_enc = tiktoken.get_encoding("o200k_base")
 MAX_CONTEXT_TOKENS = 8000
+RESPONSE_TOKEN_RESERVE = 2500
 
 
 @lru_cache(maxsize=1)
@@ -232,16 +234,24 @@ _EN_PROGRAM_MAP = {
 
 def _detect_program(message: str) -> str | None:
     msg_lower = message.lower()
+    program_names = _load_program_names()
+
     for en_name, de_name in _EN_PROGRAM_MAP.items():
-        if en_name in msg_lower:
+        matched = en_name in msg_lower
+        if not matched:
             de_lower = de_name.lower()
-            for name in _load_program_names():
-                if name.lower() == de_lower:
+            de_pattern = r"(?<![a-zäöüß])" + re.escape(de_lower) + r"(?![a-zäöüß])"
+            matched = bool(re.search(de_pattern, msg_lower))
+        if matched:
+            candidates = [de_name.lower(), en_name.lower()]
+            for name in program_names:
+                if name.lower() in candidates:
                     return name
-            for name in _load_program_names():
-                if de_lower in name.lower():
-                    return name
-    for name in _load_program_names():
+            for candidate in candidates:
+                for name in program_names:
+                    if candidate in name.lower():
+                        return name
+    for name in program_names:
         pattern = r"(?<![a-zäöüß])" + re.escape(name.lower()) + r"(?![a-zäöüß])"
         if re.search(pattern, msg_lower):
             return name
@@ -319,19 +329,28 @@ async def _llm_resolve_program(message: str, history: list[ChatMessage]) -> str 
 
 
 _DOMAIN_CLASSIFIER_SYSTEM = (
-    "You are a domain classifier for a university regulation chatbot (LMU Munich). "
-    "Decide whether the question is about university regulations — Prüfungs- und Studienordnungen (PSTO), "
-    "Eignungssatzungen, Zulassungsordnungen, Änderungssatzungen, exam rules, study programs, "
-    "ECTS credits, thesis requirements, admission requirements, or similar academic/legal topics "
-    "related to LMU programs. Answer only with YES or NO. "
-    "YES = in domain. NO = off-topic (e.g. Mensa, housing, IT support, sports, personal advice)."
+    "You are a domain classifier for a university student assistant chatbot (LMU Munich). "
+    "Decide whether the question is related to studying at LMU Munich — including "
+    "study regulations, exams, enrollment, fees, administrative procedures, campus services, "
+    "student life, deadlines, program changes, study abroad, career services, "
+    "financial aid, disability support, libraries, or any other topic relevant to LMU students. "
+    "Answer only with YES or NO. "
+    "YES = related to studying at LMU. NO = completely unrelated (e.g. cooking recipes, "
+    "general trivia, programming help, weather, sports results)."
 )
 
-_OFF_TOPIC_RESPONSE = (
-    "I am the campusLMU Study Assistant and can only answer questions about "
-    "study and exam regulations (PSTO), eligibility requirements, and admission rules. "
-    "For other inquiries, please contact the relevant LMU office."
-)
+def _build_off_topic_response(lang: str = "de") -> str:
+    if lang == "en":
+        return (
+            "I am the campusLMU Study Assistant and can help with questions about "
+            "studying at LMU — regulations, enrollment, fees, deadlines, campus services, and more. "
+            "This question seems outside my scope. Could you rephrase it in relation to your studies?"
+        )
+    return (
+        "Ich bin der campusLMU Studienassistent und helfe bei Fragen rund ums Studium an der LMU — "
+        "Prüfungsordnungen, Einschreibung, Gebühren, Fristen, Campusservices und mehr. "
+        "Diese Frage scheint außerhalb meines Bereichs zu liegen. Kannst du sie in Bezug auf dein Studium umformulieren?"
+    )
 
 
 _IN_DOMAIN_KEYWORDS = re.compile(
@@ -339,7 +358,21 @@ _IN_DOMAIN_KEYWORDS = re.compile(
     r"regelstudienzeit|eignung|zulassung|änderung|anrechnung|immatrikulation|"
     r"wiederholung|klausur|pflicht|wahlpflicht|thesis|exam|credit|admission|"
     r"eligibility|enrollment|psto|studienordnung|prüfungsordnung|satzung|"
-    r"studiengang|abschluss|diplom|bachelor|master|§\s*\d)",
+    r"studiengang|abschluss|diplom|bachelor|master|§\s*\d"
+    r"|rückmeldung|exmatrikulation|beiträge|gebühren|semesterticket"
+    r"|krankenversicherung|beurlaubung|bibliothek|lmucard|studienberatung"
+    r"|datenschutz|stundenplan|fachschaft|studierendenvertretung"
+    r"|adresse|adressänderung|semesterbeitrag|finanzierung|stipendium"
+    r"|career\s*service|ausland|erasmus|lmuexchange"
+    r"|unfallversicherung|vorlesungsverzeichnis|vorlesungszeit"
+    r"|semestertermin|seniorenstudium|gaststudierende|zweitstudium"
+    r"|doppelstudium|promotion|lehramt|quereinstieg|ortswechsel"
+    r"|behinderung|beeinträchtigung|bescheinigung|fachwechsel"
+    r"|hochschulzugang|bewerbung|uni|universität|lmu"
+    r"|wohnung|wohnen|wohnheim|studierendenwerk|mensa|bafög|bafoeg"
+    r"|eduroam|wlan|wifi|vpn|it.?service|lmu.?account"
+    r"|housing|dormitory|cafeteria|financial\s*aid"
+    r"|visa|aufenthalts|international\s*office)",
     re.IGNORECASE,
 )
 
@@ -405,7 +438,7 @@ def _count_tokens(text: str) -> int:
 
 
 def _trim_history(history: list[ChatMessage], system_tokens: int, context_tokens: int) -> list[ChatMessage]:
-    budget = settings.model_context_limit - system_tokens - context_tokens - 2500
+    budget = settings.model_context_limit - system_tokens - context_tokens - RESPONSE_TOKEN_RESERVE
     if budget <= 0:
         logger.warning(
             "Context budget exhausted (system=%d, context=%d, limit=%d), dropping all history",
@@ -435,21 +468,19 @@ async def chat_stream(
     timing: dict[str, float] = {}
     t_start = time.perf_counter()
 
-    # 1. Domain check + query rewrite + program detection in parallel
+    # 1. Domain check + query rewrite + route classification in parallel
     #    Skip domain check on follow-ups — user already established context.
     t0 = time.perf_counter()
     program_was_provided = program_name is not None
     need_domain = not history
     need_rewrite = bool(history)
-    need_program = not program_name
 
     coros = {}
     if need_domain:
         coros["domain"] = _is_in_domain(message)
     if need_rewrite:
         coros["rewrite"] = _rewrite_query(message, history)
-    if need_program:
-        coros["program"] = _detect_program_from_context(message, history)
+    coros["route"] = classify_route(message)
 
     keys = list(coros.keys())
     results_list = await asyncio.gather(*coros.values())
@@ -457,41 +488,63 @@ async def chat_stream(
 
     in_domain = results_map.get("domain", True)
     search_query = results_map.get("rewrite", message)
-    if need_program and not program_was_provided:
-        program_name = results_map.get("program")
+    route: QueryRoute = results_map["route"]
     if program_name:
         in_domain = True
     timing["rewrite_ms"] = round((time.perf_counter() - t0) * 1000, 1)
 
     if not in_domain:
-        yield _sse("token", {"content": _OFF_TOPIC_RESPONSE})
+        lang = detect_response_language(message, history)
+        yield _sse("token", {"content": _build_off_topic_response(lang)})
         yield _sse("citations", {"citations": []})
         yield _sse("done", {})
         return
 
+    # Program detection: only for REGULATION and BOTH routes
+    need_program = not program_name and route != QueryRoute.GENERAL
+    if need_program:
+        program_name = await _detect_program_from_context(message, history)
     if program_name and not program_was_provided:
         yield _sse("detected_program", {"program_name": program_name})
 
-    # 2b. Infer doc_type from query classification
+    # 2b. Infer doc_type from query classification (regulation queries only)
     _QUERY_TYPE_TO_DOC_TYPE = {"eligibility": "eignung", "amendment": "aenderung"}
     query_type = classify_query(search_query)
-    doc_type = _QUERY_TYPE_TO_DOC_TYPE.get(query_type)
+    doc_type = _QUERY_TYPE_TO_DOC_TYPE.get(query_type) if route != QueryRoute.GENERAL else None
 
-    # 3. Retrieve relevant chunks (includes HyDE, dual-search, RRF, neighbor expansion)
+    # 3. Retrieve from the appropriate index(es) based on route
     t0 = time.perf_counter()
-    result = await retrieve(search_query, doc_type=doc_type, program_name=program_name, query_type=query_type)
+    if route == QueryRoute.GENERAL:
+        result = await retrieve_web(search_query)
+    elif route == QueryRoute.BOTH:
+        result = await retrieve_combined(
+            search_query, doc_type=doc_type, program_name=program_name, query_type=query_type,
+        )
+        if not result.citations and (doc_type or program_name):
+            result = await retrieve_combined(search_query, query_type=query_type)
+            result.low_confidence = True
+    else:  # REGULATION
+        result = await retrieve(search_query, doc_type=doc_type, program_name=program_name, query_type=query_type)
+        if doc_type and not result.citations:
+            result = await retrieve(search_query, program_name=program_name, query_type=query_type)
+            result.low_confidence = True
 
-    # Fallback: if doc_type filter was too restrictive, retry without it
-    if doc_type and not result.citations:
-        result = await retrieve(search_query, program_name=program_name, query_type=query_type)
-        result.low_confidence = True
     timing["retrieve_ms"] = round((time.perf_counter() - t0) * 1000, 1)
+    timing["route"] = route.value
     if result.timing:
         timing.update({f"ret_{k}": v for k, v in result.timing.items()})
     citations = result.citations
 
     if not citations:
-        yield _sse("token", {"content": NO_INFO_FALLBACK})
+        lang = detect_response_language(message, history)
+        fallback = build_no_info_fallback(
+            query=search_query,
+            route=route.value,
+            query_type=query_type,
+            lang=lang,
+            program_name=program_name,
+        )
+        yield _sse("token", {"content": fallback})
         yield _sse("citations", {"citations": []})
         yield _sse("done", {})
         return
@@ -514,7 +567,14 @@ async def chat_stream(
     user_prompt = build_user_prompt(context, search_query)
 
     # 5. Build messages array with token-aware history trimming
-    system_prompt = build_system_prompt(message, history)
+    content_types = {c.doc_type for c in citations}
+    system_prompt = build_system_prompt(
+        message, history,
+        content_types=content_types,
+        route=route.value,
+        query_type=query_type,
+        program_name=program_name,
+    )
     system_tokens = _count_tokens(system_prompt)
     context_tokens = _count_tokens(user_prompt)
     trimmed_history = _trim_history(history, system_tokens, context_tokens)
@@ -524,14 +584,18 @@ async def chat_stream(
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": user_prompt})
 
-    # 6. Send preliminary citation map so frontend can render chips during streaming
+    # 6a. Send detected language so frontend can localize UI without guessing
+    lang = detect_response_language(message, history)
+    yield _sse("language", {"lang": lang})
+
+    # 6b. Send preliminary citation map so frontend can render chips during streaming
     pre_citation_map = {
         c.index: {
             "index": c.index,
             "section_id": c.section_id,
             "section_title": c.section_title,
             "absatz": c.absatz,
-            "doc_name": c.doc_name,
+            "doc_name": short_doc_label(c) if c.doc_type != "web_1x1" else c.doc_name,
             "doc_type": c.doc_type,
         }
         for c in citations
@@ -579,7 +643,7 @@ async def chat_stream(
             "section_title": c.section_title,
             "absatz": c.absatz,
             "page_number": c.page_number,
-            "doc_name": c.doc_name,
+            "doc_name": short_doc_label(c) if c.doc_type != "web_1x1" else c.doc_name,
             "source_url": c.source_url,
             "content": strip_for_display(c.content),
             "doc_type": c.doc_type,

@@ -17,3 +17,5 @@ aiohttp>=3.9
 python-json-logger>=3.2
 redis[hiredis]>=5.2
 lingua-language-detector>=2.2
+markdownify>=0.14
+beautifulsoup4>=4.12
