@@ -176,12 +176,15 @@ def detect_response_language(text: str, history: list | None = None) -> str:
         if lang:
             return lang
 
-    # Queries starting with English words are English even if they contain German terms
+    lingua_result = _detect_lang(text)
+    if lingua_result:
+        return lingua_result
+
     stripped = text.strip()
     if _ENGLISH_STARTER.match(stripped):
         return "en"
 
-    return _detect_lang(text) or _language_from_history(history) or "de"
+    return _language_from_history(history) or "de"
 
 
 def _language_from_history(history: list | None) -> str | None:
