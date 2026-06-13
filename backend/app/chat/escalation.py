@@ -77,7 +77,7 @@ _FACULTY_FSB_URLS: dict[str, list[str]] = {
     "https://www.cup.lmu.de/de/studium/beratungs-und-ansprechstellen-an-der-fakultaet/": [
         "Chemie", "Biochemie", "Pharmaceutical Sciences",
     ],
-    "https://www.bio.lmu.de/de/studium/studiengangskoordination/": [
+    "https://www.bio.lmu.de/de/studium/fuer-studierende/ansprechpartner/studiengangskoordination/": [
         "Molecular and Cellular Biology", "Plant Sciences",
         "Evolution, Ecology and Systematics",
         "Human Biology - Principles of Health and Disease", "Neurosciences",
@@ -182,10 +182,79 @@ def get_fsb_url(program_name: str) -> str:
 # LMU exam offices (Prüfungsämter) are organised per faculty; the generic list
 # page makes a student hunt for theirs — bad exactly for the legally most relevant
 # contact. Populate this map (parallel to _FACULTY_FSB_URLS) to route directly.
-# Intentionally left to be filled with VERIFIED URLs — do NOT invent links that may
-# 404; unmapped programs safely fall back to the generic list page.
+# URLs verified live (HTTP 200, post-redirect canonical) 2026-06-13. Programs are grouped
+# by the exam office that serves their faculty (LMU groups exam offices by subject area:
+# PAGS = humanities/social, ISC = business/economics, PANI = natural sciences).
+# Unmapped programs (Biology, Chemistry/Pharmacy, Medicine, Veterinary Medicine — no
+# verified dedicated exam-office page) safely fall back to the generic list page.
 _FACULTY_PRUEFUNGSAMT_URLS: dict[str, list[str]] = {
-    # "https://www.<faculty>.lmu.de/.../pruefungsamt/": ["Informatik", "Data Science", ...],
+    # ISC — Informations- und Servicecenter Wirtschaftswissenschaftliche Prüfungen
+    "https://www.lmu.de/isc/de/": [
+        "Betriebswirtschaftslehre", "Management and Digital Technologies",
+        "Master of Science in Management - European Triple Degree",
+        "Master of Science in Management – International Triple Degree",
+        "Wirtschaftspädagogik I",
+        "Wirtschaftspädagogik mit integriertem Wahlfach (Wirtschaftspädagogik II)",
+        "Economics", "Quantitative Economics", "Insurance",
+    ],
+    # PANI — Prüfungsamt Naturwissenschaften Innenstadt (Math, CS, Statistics, Geo)
+    "https://www.pani.pa.uni-muenchen.de/index.html": [
+        "Informatik", "Medieninformatik", "Mensch-Computer-Interaktion",
+        "Software Engineering", "Data Science", "Bioinformatik",
+        "Computerlinguistik mit Nebenfach", "Computerlinguistik mit Profilbereich",
+        "Mathematik", "Finanz- und Versicherungsmathematik",
+        "Theoretical and Mathematical Physics", "Statistics and Data Science",
+        "Human Geography and Sustainability: Monitoring, Modeling and Management",
+        "Umweltsysteme und Nachhaltigkeit - Monitoring, Modellierung und Management",
+        "Environment and Society", "Geomaterials and Geochemistry",
+        "Geobiology and Paleobiology", "Ingenieur- und Hydrogeologie",
+    ],
+    # PAGS — Prüfungsamt für Geistes- und Sozialwissenschaften
+    "https://www.lmu.de/de/studium/wichtige-kontakte/pruefungsaemter/pruefungsamt-fuer-geistes-und-sozialwissenschaften/": [
+        "Evangelische Theologie", "Katholische Theologie",
+        "Kunstgeschichte", "Spätantike und Byzantinische Kunstgeschichte",
+        "Geschichte", "Klassische Archäologie",
+        "Provinzialrömische Archäologie", "Vor- und Frühgeschichtliche Archäologie",
+        "Vorderasiatische Archäologie", "Mittelalter- und Renaissancestudien",
+        "Philosophie", "Antike Philosophie", "Theoretische Philosophie",
+        "Logic and Philosophy of Science", "Philosophie, Politik und Wirtschaft",
+        "Psychologie: Klinische Psychologie und Psychotherapie",
+        "Psychologie: Wirtschafts-, Organisations- und Sozialpsychologie",
+        "Psychology: Learning Sciences and Human Development",
+        "Neuro-cognitive Psychology",
+        "Pädagogik mit Schwerpunkt Bildungsforschung und Bildungsmanagement",
+        "Prävention, Inklusion und Rehabilitation (PIR) - Gehörlosenpädagogik",
+        "Prävention, Inklusion und Rehabilitation (PIR) - Gehörlosenpädagogik (Modellstudiengang)",
+        "Prävention, Inklusion und Rehabilitation (PIR) - Schwerhörigenpädagogik",
+        "Prävention, Inklusion und Rehabilitation (PIR) - Schwerhörigenpädagogik (Modellstudiengang)",
+        "Musikpädagogik",
+        "Empirische Kulturwissenschaft und Europäische Ethnologie",
+        "Religions- und Kulturwissenschaft", "Religion und Philosophie in Asien",
+        "Digital Cultural Heritage", "Ethnologie",
+        "Ägyptologie und Koptologie", "Altorientalistik", "Byzantinistik",
+        "Allgemeine und Vergleichende Literaturwissenschaft",
+        "Germanistische Linguistik", "Germanistische Literaturwissenschaft",
+        "English Studies", "Cultural and Cognitive Linguistics",
+        "Romanistik", "Italienstudien", "Skandinavistik", "Slavistik",
+        "Griechische Philologie", "Lateinische Philologie",
+        "Albanologie", "Finnougristik", "Neogräzistik",
+        "Phonetik und Sprachverarbeitung", "Phonetik und Sprachverarbeitung mit Nebenfach",
+        "Vergleichende Indoeuropäische Sprachwissenschaft",
+        "Deutsch als Fremdsprache", "Literarisches Übersetzen",
+        "Interkulturelle Kommunikation", "Sprachtherapie",
+        "Buchwissenschaft: Buch- und Medienforschung",
+        "Buchwissenschaft: Verlagspraxis",
+        "Politikwissenschaft", "Soziologie",
+        "Kommunikations- und Medienforschung", "Journalismus",
+        "Journalism, Media and Globalisation", "Strategische Kommunikation",
+        "Computational Social Science",
+    ],
+    "https://www.jura.lmu.de/de/fakultaet/einrichtungen/pruefungsamt/index.html": [
+        "Rechtswissenschaften",
+    ],
+    "https://www.physik.lmu.de/de/studium/pruefungsamt/index.html": [
+        "Physics", "Astrophysics", "Meteorology", "Geophysics",
+    ],
 }
 
 _PRUEFUNGSAMT_OVERVIEW_URL = ESCALATION_CONTACTS["pruefungsamt"]["url"]
