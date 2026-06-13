@@ -45,13 +45,17 @@ _GENERAL_KEYWORDS = re.compile(
     r"|seniorenstudium|gaststudierende|zweitstudium|doppelstudium"
     r"|promotionsstudium|lehramt|quereinstieg|ortswechsel"
     r"|behinderung|beeinträchtigung|kind\b|eltern"
-    r"|online.?selbstbedienung|bescheinigung(?:en)?)",
+    r"|online.?selbstbedienung|bescheinigung(?:en)?"
+    r"|studienangebot|studiengangsfinder|welche\s+(?:master|studiengänge))",
     re.IGNORECASE,
 )
 
 _BOTH_KEYWORDS = re.compile(
     r"(?:fachwechsel|studiengangswechsel|höherstufung|bewerbung|zulass(?:ung|ungsbeschränk)"
-    r"|hochschulzugang|anerkennung|transcript)",
+    r"|hochschulzugang|anerkennung|transcript"
+    r"|(?:welche|which|what)\s+(?:master|program|studien)"
+    r"|(?:can|kann)\s+(?:i|ich)\s+(?:study|studier)"
+    r"|(?:master|studiengang).*(?:voraussetzung|requirement|admission|zugang))",
     re.IGNORECASE,
 )
 
