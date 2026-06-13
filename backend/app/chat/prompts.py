@@ -1,6 +1,6 @@
 import re
 
-from app.chat.escalation import resolve_escalation_contacts
+from app.chat.escalation import ESCALATION_CONTACTS, resolve_escalation_contacts
 
 
 def build_no_info_fallback(
@@ -106,6 +106,39 @@ def build_grounding_retraction(
     )
 
 
+def build_advisory_disclaimer(lang: str = "de", include_international: bool = False) -> str:
+    """Appended to advisory (program-selection) answers.
+
+    The advisory path ("what can I study with degree X?") is covered by neither the
+    answerability score gate nor the grounding verifier, so this guarantees a
+    not-binding-advice disclaimer + hand-off to human advising regardless of what the
+    model produced. include_international adds the International Office (for international
+    applicants, e.g. English-language queries).
+    """
+    sb = ESCALATION_CONTACTS["studienberatung"]
+    io = ESCALATION_CONTACTS["international"]
+    name_key = "name_en" if lang == "en" else "name_de"
+    url_key = "url_en" if lang == "en" else "url"
+    sb_link = f"[{sb[name_key]}]({sb[url_key]})"
+    io_link = f"[{io[name_key]}]({io[url_key]})"
+
+    if lang == "en":
+        msg = (
+            "\n\n---\n\n⚠️ **This is general orientation, not binding study advice.** "
+            "Whether your specific background qualifies you for a program is decided solely "
+            f"by the university. Please confirm your options with the {sb_link}"
+        )
+        msg += f" and the {io_link}." if include_international else "."
+    else:
+        msg = (
+            "\n\n---\n\n⚠️ **Das ist eine unverbindliche Orientierung, keine verbindliche "
+            "Studienberatung.** Ob dein konkreter Hintergrund für einen Studiengang ausreicht, "
+            f"entscheidet allein die Universität. Lass deine Möglichkeiten bei der {sb_link}"
+        )
+        msg += f" und dem {io_link} bestätigen." if include_international else " bestätigen."
+    return msg
+
+
 _REGULATION_DOC_TYPES = frozenset({"psto", "eignung", "zulassung", "aenderung"})
 
 # ---------------------------------------------------------------------------
@@ -189,6 +222,18 @@ Die vorliegenden Quellen passen nur teilweise zur Frage. Halte dich strikt daran
 - Beantworte **nur**, was direkt und eindeutig aus den Quellen hervorgeht. Wenn die Quellen dazu nichts Eindeutiges hergeben, sage das offen.
 - Stelle **keine** Vermutungen an und fülle Lücken **nicht** mit Allgemeinwissen.
 - Schließe mit einer klaren Empfehlung, die Angabe bei der genannten Anlaufstelle zu verifizieren."""
+
+
+_ADVISORY_LAYER = """
+
+## Regeln für Studienwahl-Fragen (Studienangebot)
+
+Die Frage zielt auf die Wahl eines Studiengangs oder die Eignung eines Hintergrunds (z.B. "Was kann ich mit einem Bachelor in BWL studieren?"). Halte dich strikt daran:
+- **Schlage passende Studiengänge vor**, die in den Quellen vorkommen, und nenne kurz Inhalt und — falls in den Quellen enthalten — die Zugangsvoraussetzungen.
+- **Beurteile NIE verbindlich, ob der Hintergrund des Nutzers für die Zulassung ausreicht.** Sage nicht "du qualifizierst dich" oder "du wirst zugelassen" — die Eignung prüft allein die Universität.
+- Formuliere Vorschläge als unverbindliche Orientierung ("infrage kommen könnten …").
+- Erfinde keine Studiengänge, Voraussetzungen oder NC-Werte, die nicht in den Quellen stehen.
+- Schließe mit dem Hinweis, dass dies keine verbindliche Studienberatung ist, und verweise auf die Zentrale Studienberatung (bei internationalen Bewerbungen zusätzlich das International Office)."""
 
 
 _LANG_DE = (
@@ -321,11 +366,14 @@ def build_system_prompt(
     types = content_types or set()
     has_regulation = bool(types & _REGULATION_DOC_TYPES)
     has_web = bool(types & {"web_1x1", "studienangebot"})
+    has_studienangebot = "studienangebot" in types
 
     if has_regulation:
         prompt += _REGULATION_LAYER
     if has_web:
         prompt += _WEB_LAYER
+    if has_studienangebot:
+        prompt += _ADVISORY_LAYER
     if confidence == "uncertain":
         prompt += _UNCERTAINTY_LAYER
 

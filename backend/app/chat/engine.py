@@ -11,9 +11,11 @@ import tiktoken
 from openai import AsyncAzureOpenAI
 
 from app.chat.citations import extract_used_citation_indices, normalize_citation_markers, strip_for_display
+from app.chat.escalation import ESCALATION_CONTACTS
 from app.chat.few_shot import classify_query
 from app.chat.grounding import verify_grounding
 from app.chat.prompts import (
+    build_advisory_disclaimer,
     build_context,
     build_grounding_retraction,
     build_low_confidence_notice,
@@ -695,6 +697,22 @@ async def chat_stream(
             yield _sse("token", {"content": retraction})
             logger.warning("Grounding %s [req=%s]: unsupported=%s", verification, request_id, verdict["unsupported"])
 
+    # 8b. Advisory answers (program selection) are covered by neither the score gate nor
+    #     the grounding verifier — guarantee a not-binding disclaimer + hand-off to advising,
+    #     unless the model already linked Studienberatung / International Office itself.
+    advisory_disclaimer_added = False
+    if "studienangebot" in content_types:
+        _advisory_urls = (
+            ESCALATION_CONTACTS["studienberatung"]["url"],
+            ESCALATION_CONTACTS["international"]["url"],
+            ESCALATION_CONTACTS["international"]["url_en"],
+        )
+        if not any(u in full_response for u in _advisory_urls):
+            disclaimer = build_advisory_disclaimer(lang=lang, include_international=(lang == "en"))
+            full_response += disclaimer
+            yield _sse("token", {"content": disclaimer})
+            advisory_disclaimer_added = True
+
     # 9. Normalize citation markers and send metadata
     normalized_content = normalize_citation_markers(full_response)
     used_citations = [
@@ -728,7 +746,7 @@ async def chat_stream(
         route=route.value, query_type=query_type, program_name=program_name, lang=lang,
         model=resolved_model, confidence=confidence, top_score=round(result.top_score, 3),
         num_citations=len(used_citations), cited_sections=cited_sections,
-        verification=verification, timing=timing,
+        verification=verification, advisory=advisory_disclaimer_added, timing=timing,
     )
 
 
