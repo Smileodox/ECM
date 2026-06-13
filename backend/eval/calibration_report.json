@@ -1,0 +1,724 @@
+{
+  "scored": [
+    {
+      "id": "fact_01",
+      "answerable": true,
+      "top_score": 2.803,
+      "confidence": "solid",
+      "num_citations": 6,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "fact_02",
+      "answerable": true,
+      "top_score": 2.917,
+      "confidence": "solid",
+      "num_citations": 5,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "fact_03",
+      "answerable": true,
+      "top_score": 2.718,
+      "confidence": "solid",
+      "num_citations": 4,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "fact_04",
+      "answerable": true,
+      "top_score": 3.041,
+      "confidence": "solid",
+      "num_citations": 6,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "fact_05",
+      "answerable": true,
+      "top_score": 2.614,
+      "confidence": "solid",
+      "num_citations": 4,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "fact_06",
+      "answerable": true,
+      "top_score": 2.135,
+      "confidence": "solid",
+      "num_citations": 6,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "fact_07",
+      "answerable": true,
+      "top_score": 2.634,
+      "confidence": "solid",
+      "num_citations": 6,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "fact_08",
+      "answerable": true,
+      "top_score": 2.925,
+      "confidence": "solid",
+      "num_citations": 4,
+      "expected_contact": null,
+      "actual_contact": "Fachstudienberatung"
+    },
+    {
+      "id": "fact_09",
+      "answerable": true,
+      "top_score": 2.698,
+      "confidence": "solid",
+      "num_citations": 5,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "fact_10",
+      "answerable": true,
+      "top_score": 2.651,
+      "confidence": "solid",
+      "num_citations": 6,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "comp_01",
+      "answerable": true,
+      "top_score": 3.059,
+      "confidence": "solid",
+      "num_citations": 1,
+      "expected_contact": null,
+      "actual_contact": "Fachstudienberatung"
+    },
+    {
+      "id": "comp_02",
+      "answerable": true,
+      "top_score": 2.187,
+      "confidence": "solid",
+      "num_citations": 4,
+      "expected_contact": null,
+      "actual_contact": "Fachstudienberatung"
+    },
+    {
+      "id": "comp_03",
+      "answerable": true,
+      "top_score": 2.763,
+      "confidence": "solid",
+      "num_citations": 9,
+      "expected_contact": null,
+      "actual_contact": "Fachstudienberatung"
+    },
+    {
+      "id": "comp_04",
+      "answerable": true,
+      "top_score": 2.448,
+      "confidence": "solid",
+      "num_citations": 8,
+      "expected_contact": null,
+      "actual_contact": "Fachstudienberatung"
+    },
+    {
+      "id": "comp_05",
+      "answerable": true,
+      "top_score": 2.118,
+      "confidence": "solid",
+      "num_citations": 5,
+      "expected_contact": null,
+      "actual_contact": "Fachstudienberatung"
+    },
+    {
+      "id": "proc_01",
+      "answerable": true,
+      "top_score": 2.792,
+      "confidence": "solid",
+      "num_citations": 4,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "proc_02",
+      "answerable": true,
+      "top_score": 3.01,
+      "confidence": "solid",
+      "num_citations": 10,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "proc_03",
+      "answerable": true,
+      "top_score": 2.544,
+      "confidence": "solid",
+      "num_citations": 4,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "proc_04",
+      "answerable": true,
+      "top_score": 2.247,
+      "confidence": "solid",
+      "num_citations": 4,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "proc_05",
+      "answerable": true,
+      "top_score": 2.66,
+      "confidence": "solid",
+      "num_citations": 4,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "amend_01",
+      "answerable": true,
+      "top_score": 2.201,
+      "confidence": "solid",
+      "num_citations": 6,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "amend_02",
+      "answerable": true,
+      "top_score": 1.968,
+      "confidence": "solid",
+      "num_citations": 5,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "amend_03",
+      "answerable": true,
+      "top_score": 2.969,
+      "confidence": "solid",
+      "num_citations": 6,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "amend_04",
+      "answerable": true,
+      "top_score": 2.613,
+      "confidence": "solid",
+      "num_citations": 9,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "amend_05",
+      "answerable": true,
+      "top_score": 2.66,
+      "confidence": "solid",
+      "num_citations": 7,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "edge_01",
+      "answerable": true,
+      "top_score": 3.126,
+      "confidence": "solid",
+      "num_citations": 4,
+      "expected_contact": null,
+      "actual_contact": "Zentrale Studienberatung"
+    },
+    {
+      "id": "edge_02",
+      "answerable": true,
+      "top_score": 2.636,
+      "confidence": "solid",
+      "num_citations": 7,
+      "expected_contact": null,
+      "actual_contact": "Zentrale Studienberatung"
+    },
+    {
+      "id": "edge_03",
+      "answerable": true,
+      "top_score": 1.75,
+      "confidence": "solid",
+      "num_citations": 0,
+      "expected_contact": null,
+      "actual_contact": "Studierendenwerk München Oberbayern"
+    },
+    {
+      "id": "edge_04",
+      "answerable": true,
+      "top_score": 2.42,
+      "confidence": "solid",
+      "num_citations": 7,
+      "expected_contact": null,
+      "actual_contact": "Zentrale Studienberatung"
+    },
+    {
+      "id": "edge_05",
+      "answerable": true,
+      "top_score": 2.94,
+      "confidence": "solid",
+      "num_citations": 10,
+      "expected_contact": null,
+      "actual_contact": "Zentrale Studienberatung"
+    },
+    {
+      "id": "en_01",
+      "answerable": true,
+      "top_score": 2.803,
+      "confidence": "solid",
+      "num_citations": 6,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "en_02",
+      "answerable": true,
+      "top_score": 2.318,
+      "confidence": "solid",
+      "num_citations": 10,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "en_03",
+      "answerable": true,
+      "top_score": 2.695,
+      "confidence": "solid",
+      "num_citations": 5,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "en_04",
+      "answerable": true,
+      "top_score": 2.757,
+      "confidence": "solid",
+      "num_citations": 9,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "en_05",
+      "answerable": true,
+      "top_score": 2.509,
+      "confidence": "solid",
+      "num_citations": 5,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "en_06",
+      "answerable": true,
+      "top_score": 2.187,
+      "confidence": "solid",
+      "num_citations": 4,
+      "expected_contact": null,
+      "actual_contact": "Fachstudienberatung"
+    },
+    {
+      "id": "en_07",
+      "answerable": true,
+      "top_score": 2.469,
+      "confidence": "solid",
+      "num_citations": 9,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "en_08",
+      "answerable": true,
+      "top_score": 2.468,
+      "confidence": "solid",
+      "num_citations": 2,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "en_09",
+      "answerable": true,
+      "top_score": 3.248,
+      "confidence": "solid",
+      "num_citations": 4,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "en_10",
+      "answerable": true,
+      "top_score": 2.463,
+      "confidence": "solid",
+      "num_citations": 10,
+      "expected_contact": null,
+      "actual_contact": "Zentrale Studienberatung"
+    },
+    {
+      "id": "mix_01",
+      "answerable": true,
+      "top_score": 2.728,
+      "confidence": "solid",
+      "num_citations": 6,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "mix_02",
+      "answerable": true,
+      "top_score": 2.574,
+      "confidence": "solid",
+      "num_citations": 10,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "mix_03",
+      "answerable": true,
+      "top_score": 2.834,
+      "confidence": "solid",
+      "num_citations": 6,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "prog_01",
+      "answerable": true,
+      "top_score": 3.061,
+      "confidence": "solid",
+      "num_citations": 5,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "prog_02",
+      "answerable": true,
+      "top_score": 2.913,
+      "confidence": "solid",
+      "num_citations": 4,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "prog_03",
+      "answerable": true,
+      "top_score": 0.0,
+      "confidence": "abstain",
+      "num_citations": 0,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "prog_04",
+      "answerable": true,
+      "top_score": 2.915,
+      "confidence": "solid",
+      "num_citations": 7,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "prog_05",
+      "answerable": true,
+      "top_score": 2.651,
+      "confidence": "solid",
+      "num_citations": 5,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "complex_01",
+      "answerable": true,
+      "top_score": 2.593,
+      "confidence": "solid",
+      "num_citations": 8,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "complex_02",
+      "answerable": true,
+      "top_score": 2.343,
+      "confidence": "solid",
+      "num_citations": 5,
+      "expected_contact": null,
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "una_01",
+      "answerable": false,
+      "top_score": 2.593,
+      "confidence": "solid",
+      "num_citations": 4,
+      "expected_contact": "Zentrale Studienberatung",
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "una_02",
+      "answerable": false,
+      "top_score": 2.543,
+      "confidence": "solid",
+      "num_citations": 10,
+      "expected_contact": "Prüfungsamt",
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "una_03",
+      "answerable": false,
+      "top_score": 1.923,
+      "confidence": "solid",
+      "num_citations": 6,
+      "expected_contact": "Prüfungsamt",
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "una_04",
+      "answerable": false,
+      "top_score": 2.637,
+      "confidence": "solid",
+      "num_citations": 4,
+      "expected_contact": "Studentenkanzlei",
+      "actual_contact": "Studentenkanzlei"
+    },
+    {
+      "id": "una_05",
+      "answerable": false,
+      "top_score": 2.04,
+      "confidence": "solid",
+      "num_citations": 6,
+      "expected_contact": "Prüfungsamt",
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "una_06",
+      "answerable": false,
+      "top_score": 1.803,
+      "confidence": "solid",
+      "num_citations": 5,
+      "expected_contact": "Prüfungsamt",
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "una_07",
+      "answerable": false,
+      "top_score": 2.253,
+      "confidence": "solid",
+      "num_citations": 3,
+      "expected_contact": "Studentenkanzlei",
+      "actual_contact": "Zentrale Studienberatung"
+    },
+    {
+      "id": "una_08",
+      "answerable": false,
+      "top_score": 2.052,
+      "confidence": "solid",
+      "num_citations": 6,
+      "expected_contact": "Zentrale Studienberatung",
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "una_09",
+      "answerable": false,
+      "top_score": 0.911,
+      "confidence": "uncertain",
+      "num_citations": 1,
+      "expected_contact": "Studierendenwerk München Oberbayern",
+      "actual_contact": "Studierendenwerk München Oberbayern"
+    },
+    {
+      "id": "una_10",
+      "answerable": false,
+      "top_score": 1.912,
+      "confidence": "solid",
+      "num_citations": 1,
+      "expected_contact": "Prüfungsamt",
+      "actual_contact": "Prüfungsamt"
+    },
+    {
+      "id": "una_11",
+      "answerable": false,
+      "top_score": 2.561,
+      "confidence": "solid",
+      "num_citations": 6,
+      "expected_contact": "Zentrale Studienberatung",
+      "actual_contact": "Prüfungsamt"
+    }
+  ],
+  "contact_accuracy": 0.6363636363636364,
+  "sweep": [
+    {
+      "uncertain": 0.4,
+      "solid": 1.2,
+      "abstain_recall_unanswerable": 0.0,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.98
+    },
+    {
+      "uncertain": 0.4,
+      "solid": 1.4,
+      "abstain_recall_unanswerable": 0.0,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.98
+    },
+    {
+      "uncertain": 0.4,
+      "solid": 1.6,
+      "abstain_recall_unanswerable": 0.0,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.98
+    },
+    {
+      "uncertain": 0.4,
+      "solid": 1.8,
+      "abstain_recall_unanswerable": 0.0,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.96
+    },
+    {
+      "uncertain": 0.4,
+      "solid": 2.0,
+      "abstain_recall_unanswerable": 0.0,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.94
+    },
+    {
+      "uncertain": 0.6,
+      "solid": 1.2,
+      "abstain_recall_unanswerable": 0.0,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.98
+    },
+    {
+      "uncertain": 0.6,
+      "solid": 1.4,
+      "abstain_recall_unanswerable": 0.0,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.98
+    },
+    {
+      "uncertain": 0.6,
+      "solid": 1.6,
+      "abstain_recall_unanswerable": 0.0,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.98
+    },
+    {
+      "uncertain": 0.6,
+      "solid": 1.8,
+      "abstain_recall_unanswerable": 0.0,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.96
+    },
+    {
+      "uncertain": 0.6,
+      "solid": 2.0,
+      "abstain_recall_unanswerable": 0.0,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.94
+    },
+    {
+      "uncertain": 0.8,
+      "solid": 1.2,
+      "abstain_recall_unanswerable": 0.0,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.98
+    },
+    {
+      "uncertain": 0.8,
+      "solid": 1.4,
+      "abstain_recall_unanswerable": 0.0,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.98
+    },
+    {
+      "uncertain": 0.8,
+      "solid": 1.6,
+      "abstain_recall_unanswerable": 0.0,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.98
+    },
+    {
+      "uncertain": 0.8,
+      "solid": 1.8,
+      "abstain_recall_unanswerable": 0.0,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.96
+    },
+    {
+      "uncertain": 0.8,
+      "solid": 2.0,
+      "abstain_recall_unanswerable": 0.0,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.94
+    },
+    {
+      "uncertain": 1.0,
+      "solid": 1.2,
+      "abstain_recall_unanswerable": 0.091,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.98
+    },
+    {
+      "uncertain": 1.0,
+      "solid": 1.4,
+      "abstain_recall_unanswerable": 0.091,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.98
+    },
+    {
+      "uncertain": 1.0,
+      "solid": 1.6,
+      "abstain_recall_unanswerable": 0.091,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.98
+    },
+    {
+      "uncertain": 1.0,
+      "solid": 1.8,
+      "abstain_recall_unanswerable": 0.091,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.96
+    },
+    {
+      "uncertain": 1.0,
+      "solid": 2.0,
+      "abstain_recall_unanswerable": 0.091,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.94
+    },
+    {
+      "uncertain": 1.2,
+      "solid": 1.4,
+      "abstain_recall_unanswerable": 0.091,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.98
+    },
+    {
+      "uncertain": 1.2,
+      "solid": 1.6,
+      "abstain_recall_unanswerable": 0.091,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.98
+    },
+    {
+      "uncertain": 1.2,
+      "solid": 1.8,
+      "abstain_recall_unanswerable": 0.091,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.96
+    },
+    {
+      "uncertain": 1.2,
+      "solid": 2.0,
+      "abstain_recall_unanswerable": 0.091,
+      "false_abstain_answerable": 0.02,
+      "solid_rate_answerable": 0.94
+    }
+  ]
+}

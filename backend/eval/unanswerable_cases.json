@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "description": "Queries with NO supporting paragraph in the corpus — the answerability gate MUST abstain (hand off) on these. Seed set; expand to ~30-50 for a robust calibration. expected_contact is the correct Anlaufstelle for the right-place metric.",
+  "cases": [
+    {"id": "una_01", "category": "factual", "query": "Wie viele ECTS hat die Masterarbeit im Studiengang Quantenphilosophie?", "answerable": false, "route": "regulation", "expected_contact": "Zentrale Studienberatung", "language": "de"},
+    {"id": "una_02", "category": "eligibility", "query": "Welche Zulassungsvoraussetzungen gelten für den Master in Unterwasserbasketball an der LMU?", "answerable": false, "route": "regulation", "expected_contact": "Prüfungsamt", "language": "de"},
+    {"id": "una_03", "category": "factual", "query": "Was regelt § 312 der PSTO Informatik?", "program_name": "Informatik", "answerable": false, "route": "regulation", "expected_contact": "Prüfungsamt", "language": "de"},
+    {"id": "una_04", "category": "administrative", "query": "Wie immatrikuliere ich mich an der TU München für Maschinenbau?", "answerable": false, "route": "general", "expected_contact": "Studentenkanzlei", "language": "de"},
+    {"id": "una_05", "category": "factual", "query": "Wie hoch ist mein persönlicher Notendurchschnitt im aktuellen Semester?", "answerable": false, "route": "regulation", "expected_contact": "Prüfungsamt", "language": "de"},
+    {"id": "una_06", "category": "amendment", "query": "Gilt die Übergangsregelung der Änderungssatzung konkret für mich, wenn ich 2019 angefangen habe?", "program_name": "Informatik", "answerable": false, "route": "regulation", "expected_contact": "Prüfungsamt", "language": "de"},
+    {"id": "una_07", "category": "factual", "query": "What is the exact tuition fee for the non-existent LMU MBA program?", "answerable": false, "route": "general", "expected_contact": "Studentenkanzlei", "language": "en"},
+    {"id": "una_08", "category": "eligibility", "query": "Brauche ich für den Bachelor Astrologie an der LMU ein Vorpraktikum?", "answerable": false, "route": "regulation", "expected_contact": "Zentrale Studienberatung", "language": "de"},
+    {"id": "una_09", "category": "factual", "query": "Welche Mensa hat heute Schnitzel auf der Speisekarte?", "answerable": false, "route": "general", "expected_contact": "Studierendenwerk München Oberbayern", "language": "de"},
+    {"id": "una_10", "category": "contact", "query": "Wie lautet die private Handynummer meiner Prüferin?", "answerable": false, "route": "regulation", "expected_contact": "Prüfungsamt", "language": "de"},
+    {"id": "una_11", "category": "factual", "query": "Wie viele Semester dauert der Masterstudiengang Zeitreiseforschung?", "answerable": false, "route": "regulation", "expected_contact": "Zentrale Studienberatung", "language": "de"},
+    {"id": "una_12", "category": "process", "query": "Wie melde ich mein selbst erfundenes Wahlfach 'Drachenkunde' zur Prüfung an?", "program_name": "Informatik", "answerable": false, "route": "regulation", "expected_contact": "Prüfungsamt", "language": "de"}
+  ]
+}

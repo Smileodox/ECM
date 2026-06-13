@@ -24,10 +24,16 @@ async def chat(request: Request, body: ChatRequest):
     if len(body.history) > MAX_HISTORY_LENGTH:
         body.history = body.history[-MAX_HISTORY_LENGTH:]
 
+    request_id = getattr(request.state, "request_id", "-")
+
     async def event_generator():
         try:
             async with asyncio.timeout(STREAM_TIMEOUT_SECONDS):
-                async for event in chat_stream(body.message, body.history, program_name=body.program_name):
+                async for event in chat_stream(
+                    body.message, body.history,
+                    program_name=body.program_name, model_name=body.model_name,
+                    request_id=request_id,
+                ):
                     if await request.is_disconnected():
                         return
                     yield event
@@ -36,7 +42,7 @@ async def chat(request: Request, body: ChatRequest):
         except Exception as exc:
             import logging
             logging.getLogger(__name__).exception("SSE stream error")
-            yield {"event": "error", "data": json.dumps({"message": f"Error: {type(exc).__name__}: {exc}"}, ensure_ascii=False)}
+            yield {"event": "error", "data": json.dumps({"message": "Something went wrong. Please try again."}, ensure_ascii=False)}
 
     return EventSourceResponse(
         event_generator(),

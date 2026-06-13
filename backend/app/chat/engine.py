@@ -12,7 +12,17 @@ from openai import AsyncAzureOpenAI
 
 from app.chat.citations import extract_used_citation_indices, normalize_citation_markers, strip_for_display
 from app.chat.few_shot import classify_query
-from app.chat.prompts import build_no_info_fallback, build_context, build_system_prompt, build_user_prompt, short_doc_label, detect_response_language
+from app.chat.grounding import verify_grounding
+from app.chat.prompts import (
+    build_context,
+    build_grounding_retraction,
+    build_low_confidence_notice,
+    build_no_info_fallback,
+    build_system_prompt,
+    build_user_prompt,
+    detect_response_language,
+    short_doc_label,
+)
 from app.config import settings
 from app.models import ChatMessage, Citation
 from app.search.retriever import RetrievalResult, retrieve, retrieve_web, retrieve_combined
@@ -24,6 +34,19 @@ _PROGRAM_NAMES: list[str] | None = None
 _enc = tiktoken.get_encoding("o200k_base")
 MAX_CONTEXT_TOKENS = 8000
 RESPONSE_TOKEN_RESERVE = 2500
+
+_REGULATION_DOC_TYPES = frozenset({"psto", "eignung", "zulassung", "aenderung"})
+
+
+def _audit_turn(request_id: str, decision: str, **fields) -> None:
+    """Emit one structured decision record per turn — the legal audit trail.
+
+    JSON-logged (see main.py); no answer text / PII, only decision metadata and the
+    cited section ids, which is what an audit needs.
+    """
+    extra = {"audit": "chat_turn", "request_id": request_id, "decision": decision}
+    extra.update({k: v for k, v in fields.items() if v is not None})
+    logger.info("chat_turn", extra=extra)
 
 
 @lru_cache(maxsize=1)
@@ -372,7 +395,11 @@ _IN_DOMAIN_KEYWORDS = re.compile(
     r"|wohnung|wohnen|wohnheim|studierendenwerk|mensa|bafög|bafoeg"
     r"|eduroam|wlan|wifi|vpn|it.?service|lmu.?account"
     r"|housing|dormitory|cafeteria|financial\s*aid"
-    r"|visa|aufenthalts|international\s*office)",
+    r"|visa|aufenthalts|international\s*office"
+    r"|get\s*in(?:to)?|apply|application|program(?:me)?|degree|course|module"
+    r"|tuition|registration|re.?register|gpa|grade|prerequisite|requirement"
+    r"|how\s*(?:do|can|to)|deadline|fee|schedule|lecture|curriculum"
+    r"|study|studying|student|university|campus)",
     re.IGNORECASE,
 )
 
@@ -419,7 +446,7 @@ async def _rewrite_query(message: str, history: list[ChatMessage]) -> str:
         response = await client.chat.completions.create(
             model=settings.azure_openai_mini_deployment,
             messages=[
-                {"role": "system", "content": "Rewrite the user's follow-up question as a standalone question that includes all necessary context from the conversation history. Only output the rewritten question, nothing else. If the question is already standalone, return it unchanged. Keep the same language as the original question. Preserve all legal references exactly as written (e.g., §14 Abs. 3, Ziff. 2, Nr. 1). Preserve program names (Studiengangbezeichnungen) exactly."},
+                {"role": "system", "content": "Rewrite the user's follow-up question as a standalone question that includes all necessary context from the conversation history. Only output the rewritten question, nothing else. If the question is already standalone, return it unchanged. Keep the same language as the original question. Preserve all legal references exactly as written (e.g., §14 Abs. 3, Ziff. 2, Nr. 1). Preserve program names (Studiengangbezeichnungen) exactly. IMPORTANT: Preserve the user's actual intent — if they ask about something NEW (e.g. curriculum, modules, grading) that differs from the previous topic (e.g. admission), do NOT fold the new question back into the old topic. Only add context like the program name, not the previous topic."},
                 {"role": "user", "content": f"Conversation:\n{history_text}\n\nFollow-up: {message}"},
             ],
             temperature=0,
@@ -460,6 +487,8 @@ async def chat_stream(
     message: str,
     history: list[ChatMessage],
     program_name: str | None = None,
+    model_name: str | None = None,
+    request_id: str = "-",
 ) -> AsyncGenerator[dict, None]:
     """Stream a RAG-augmented chat response.
 
@@ -498,7 +527,12 @@ async def chat_stream(
         yield _sse("token", {"content": _build_off_topic_response(lang)})
         yield _sse("citations", {"citations": []})
         yield _sse("done", {})
+        _audit_turn(request_id, "rejected_off_topic", route=route.value, lang=lang)
         return
+
+    # Detect language early so the frontend can localize the program hint
+    lang = detect_response_language(message, history)
+    yield _sse("language", {"lang": lang})
 
     # Program detection: only for REGULATION and BOTH routes
     need_program = not program_name and route != QueryRoute.GENERAL
@@ -523,17 +557,22 @@ async def chat_stream(
         if not result.citations and (doc_type or program_name):
             result = await retrieve_combined(search_query, query_type=query_type)
             result.low_confidence = True
+            if result.confidence == "solid":
+                result.confidence = "uncertain"  # precise-filter intent failed → less sure
     else:  # REGULATION
         result = await retrieve(search_query, doc_type=doc_type, program_name=program_name, query_type=query_type)
         if doc_type and not result.citations:
             result = await retrieve(search_query, program_name=program_name, query_type=query_type)
             result.low_confidence = True
+            if result.confidence == "solid":
+                result.confidence = "uncertain"  # precise-filter intent failed → less sure
 
     timing["retrieve_ms"] = round((time.perf_counter() - t0) * 1000, 1)
     timing["route"] = route.value
     if result.timing:
         timing.update({f"ret_{k}": v for k, v in result.timing.items()})
     citations = result.citations
+    confidence = result.confidence
 
     if not citations:
         lang = detect_response_language(message, history)
@@ -547,6 +586,12 @@ async def chat_stream(
         yield _sse("token", {"content": fallback})
         yield _sse("citations", {"citations": []})
         yield _sse("done", {})
+        decision = "abstained_low_score" if confidence == "abstain" else "abstained_no_results"
+        _audit_turn(
+            request_id, decision, route=route.value, query_type=query_type,
+            program_name=program_name, lang=lang, confidence=confidence,
+            top_score=round(result.top_score, 3), num_citations=0, timing=timing,
+        )
         return
 
     # 4. Build prompt with context
@@ -562,8 +607,8 @@ async def chat_stream(
         logger.info("Context trimmed from %d to %d citations to fit budget", len(citations), len(trimmed_citations))
         citations = trimmed_citations
 
-    if result.low_confidence:
-        context = "**Hinweis: Die folgenden Quellen haben nur eine geringe Relevanz zur Anfrage. Die Antwort könnte unvollständig sein.**\n\n" + context
+    # Note: low-confidence is surfaced as a VISIBLE uncertainty notice + a constrained
+    # system prompt below — not buried as a context hint the model can ignore.
     user_prompt = build_user_prompt(context, search_query)
 
     # 5. Build messages array with token-aware history trimming
@@ -574,6 +619,7 @@ async def chat_stream(
         route=route.value,
         query_type=query_type,
         program_name=program_name,
+        confidence=confidence,
     )
     system_tokens = _count_tokens(system_prompt)
     context_tokens = _count_tokens(user_prompt)
@@ -584,42 +630,39 @@ async def chat_stream(
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": user_prompt})
 
-    # 6a. Send detected language so frontend can localize UI without guessing
-    lang = detect_response_language(message, history)
-    yield _sse("language", {"lang": lang})
-
-    # 6b. Send preliminary citation map so frontend can render chips during streaming
+    # 6. Send preliminary citation map so frontend can render chips during streaming
     pre_citation_map = {
         c.index: {
             "index": c.index,
             "section_id": c.section_id,
             "section_title": c.section_title,
             "absatz": c.absatz,
-            "doc_name": short_doc_label(c) if c.doc_type != "web_1x1" else c.doc_name,
+            "doc_name": short_doc_label(c) if c.doc_type not in ("web_1x1", "studienangebot") else c.doc_name,
             "doc_type": c.doc_type,
         }
         for c in citations
     }
     yield _sse("pre_citations", {"citation_map": pre_citation_map})
 
-    # 7. Stream from Azure OpenAI
-    client = _get_openai_client()
+    from app.chat.providers import resolve_model, stream_chat
+    resolved_model = resolve_model(model_name)
     full_response = ""
 
-    try:
-        stream = await client.chat.completions.create(
-            model=settings.azure_openai_deployment,
-            messages=messages,
-            temperature=0.1,
-            max_completion_tokens=2000,
-            stream=True,
+    # 6b. UNCERTAIN band: lead with a visible uncertainty notice. Part of full_response
+    #     so it survives client-side normalization (no [Quelle N] markers inside it).
+    if confidence == "uncertain":
+        notice = build_low_confidence_notice(
+            query=search_query, route=route.value, query_type=query_type,
+            lang=lang, program_name=program_name,
         )
+        full_response = notice
+        yield _sse("token", {"content": notice})
 
-        async for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                token = chunk.choices[0].delta.content
-                full_response += token
-                yield _sse("token", {"content": token})
+    # 7. Stream from LLM provider
+    try:
+        async for token in stream_chat(resolved_model, messages, temperature=0.1, max_tokens=2000):
+            full_response += token
+            yield _sse("token", {"content": token})
 
     except Exception as e:
         logger.exception("Error during chat streaming")
@@ -631,10 +674,28 @@ async def chat_stream(
         else:
             user_msg = "An error occurred while processing your request. Please try again."
         yield _sse("error", {"message": user_msg})
+        _audit_turn(request_id, "error", route=route.value, query_type=query_type,
+                    confidence=confidence, lang=lang, timing=timing)
         return
 
-    # 7. Normalize citation markers and send metadata
+    # 8. Grounding check (regulation turns) — append a retraction if § refs are unsupported
     used_indices = extract_used_citation_indices(full_response)
+    verification = "skipped"
+    if settings.enable_grounding_check and route in (QueryRoute.REGULATION, QueryRoute.BOTH):
+        t_g = time.perf_counter()
+        verdict = verify_grounding(full_response, citations, used_indices)
+        verification = verdict["verdict"]
+        timing["grounding_ms"] = round((time.perf_counter() - t_g) * 1000, 1)
+        if verification in ("partially_grounded", "ungrounded"):
+            retraction = build_grounding_retraction(
+                query=search_query, route=route.value, query_type=query_type,
+                lang=lang, program_name=program_name,
+            )
+            full_response += retraction
+            yield _sse("token", {"content": retraction})
+            logger.warning("Grounding %s [req=%s]: unsupported=%s", verification, request_id, verdict["unsupported"])
+
+    # 9. Normalize citation markers and send metadata
     normalized_content = normalize_citation_markers(full_response)
     used_citations = [
         {
@@ -643,7 +704,7 @@ async def chat_stream(
             "section_title": c.section_title,
             "absatz": c.absatz,
             "page_number": c.page_number,
-            "doc_name": short_doc_label(c) if c.doc_type != "web_1x1" else c.doc_name,
+            "doc_name": short_doc_label(c) if c.doc_type not in ("web_1x1", "studienangebot") else c.doc_name,
             "source_url": c.source_url,
             "content": strip_for_display(c.content),
             "doc_type": c.doc_type,
@@ -658,8 +719,17 @@ async def chat_stream(
     timing["num_citations"] = len(used_citations)
     timing["prompt_tokens"] = system_tokens + context_tokens
     logger.debug("Chat stream completed: %s", ", ".join(f"{k}={v}" for k, v in timing.items()))
-    yield _sse("metrics", timing)
+    yield _sse("metrics", {**timing, "confidence": confidence, "verification": verification})
     yield _sse("done", {})
+
+    cited_sections = sorted({c.section_id for c in citations if c.index in used_indices and c.section_id})
+    _audit_turn(
+        request_id, "answered_uncertain" if confidence == "uncertain" else "answered_solid",
+        route=route.value, query_type=query_type, program_name=program_name, lang=lang,
+        model=resolved_model, confidence=confidence, top_score=round(result.top_score, 3),
+        num_citations=len(used_citations), cited_sections=cited_sections,
+        verification=verification, timing=timing,
+    )
 
 
 def _sse(event: str, data: dict) -> dict:

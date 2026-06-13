@@ -177,6 +177,31 @@ def get_fsb_url(program_name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Faculty-specific Prüfungsamt URLs
+# ---------------------------------------------------------------------------
+# LMU exam offices (Prüfungsämter) are organised per faculty; the generic list
+# page makes a student hunt for theirs — bad exactly for the legally most relevant
+# contact. Populate this map (parallel to _FACULTY_FSB_URLS) to route directly.
+# Intentionally left to be filled with VERIFIED URLs — do NOT invent links that may
+# 404; unmapped programs safely fall back to the generic list page.
+_FACULTY_PRUEFUNGSAMT_URLS: dict[str, list[str]] = {
+    # "https://www.<faculty>.lmu.de/.../pruefungsamt/": ["Informatik", "Data Science", ...],
+}
+
+_PRUEFUNGSAMT_OVERVIEW_URL = ESCALATION_CONTACTS["pruefungsamt"]["url"]
+
+_PROGRAM_TO_PRUEFUNGSAMT: dict[str, str] = {}
+for _url, _programs in _FACULTY_PRUEFUNGSAMT_URLS.items():
+    for _prog in _programs:
+        _PROGRAM_TO_PRUEFUNGSAMT[_prog] = _url
+
+
+def get_pruefungsamt_url(program_name: str) -> str:
+    """Return the faculty-specific Prüfungsamt URL for a program, or the generic list."""
+    return _PROGRAM_TO_PRUEFUNGSAMT.get(program_name, _PRUEFUNGSAMT_OVERVIEW_URL)
+
+
+# ---------------------------------------------------------------------------
 # Topic-based routing
 # ---------------------------------------------------------------------------
 
@@ -237,9 +262,13 @@ def resolve_escalation_contacts(
 
     if program_name:
         fsb_url = get_fsb_url(program_name)
+        pa_url = get_pruefungsamt_url(program_name)
         for c in contacts:
             if c["name_de"] == "Fachstudienberatung":
                 c["url"] = fsb_url
                 c["url_en"] = fsb_url
+            elif c["name_de"] == "Prüfungsamt":
+                c["url"] = pa_url
+                c["url_en"] = pa_url
 
     return contacts

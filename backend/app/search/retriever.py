@@ -419,31 +419,60 @@ _TITLE_SYNONYMS: dict[str, list[str]] = {
 }
 
 
-def _boost_title_matches(query: str, scored: list[tuple[float, dict]]) -> list[tuple[float, dict]]:
-    """Boost RRF scores for results whose section_title matches query keywords (exact, substring, or synonym)."""
-    keywords = {w.lower() for w in query.split() if len(w) >= 4}
-    if not keywords:
-        return scored
+def _boost_title_matches(query: str, scored: list[tuple[float, dict]]) -> list[tuple[float, float, dict]]:
+    """Boost ORDERING for title matches without corrupting the score the gate reads.
 
+    Returns (rank_score, raw_score, doc): rank_score drives ordering/selection (the
+    +0.3 title boost lives here), raw_score is the untouched reranker score (0..4)
+    that the answerability gate must use — otherwise a keyword title match would fake
+    high confidence and suppress abstention.
+    """
+    keywords = {w.lower() for w in query.split() if len(w) >= 4}
     expanded_keywords = set(keywords)
     for kw in keywords:
         for syn_key, syn_values in _TITLE_SYNONYMS.items():
             if kw.startswith(syn_key) or syn_key.startswith(kw):
                 expanded_keywords.update(syn_values)
 
-    boosted: list[tuple[float, dict]] = []
-    for score, doc in scored:
+    boosted: list[tuple[float, float, dict]] = []
+    for raw, doc in scored:
         title = (doc.get("section_title") or "").lower()
-        if not title:
-            boosted.append((score, doc))
-            continue
-        matched = any(kw in title or title in kw for kw in expanded_keywords)
-        if matched:
-            boosted.append((score + 0.3, doc))
-        else:
-            boosted.append((score, doc))
+        matched = bool(title) and bool(expanded_keywords) and any(
+            kw in title or title in kw for kw in expanded_keywords
+        )
+        rank = raw + 0.3 if matched else raw
+        boosted.append((rank, raw, doc))
     boosted.sort(key=lambda x: x[0], reverse=True)
     return boosted
+
+
+def _apply_answerability_gate(
+    ranked: list[tuple[float, float, dict]],
+) -> tuple[list[tuple[float, dict]], str, float]:
+    """Three-band gate on the RAW reranker score (Azure semantic reranker: 0..4 scale).
+
+    Returns (chosen, confidence, top_score) where chosen is [(raw_score, doc), ...]
+    in rank order and confidence is 'solid' | 'uncertain' | 'abstain'.
+      raw_top >= solid_score      -> answer confidently
+      uncertain_score <= raw_top  -> answer with explicit uncertainty + escalation
+      raw_top <  uncertain_score  -> abstain (empty -> hard hand-off upstream)
+    """
+    if not ranked:
+        return [], "abstain", 0.0
+    top_score = max(raw for _rank, raw, _doc in ranked)
+    chosen_all = [(raw, doc) for _rank, raw, doc in ranked]
+
+    if not settings.enable_answerability_gate:
+        # Escape hatch: never abstain on score, behave like the old permissive path.
+        return chosen_all, "solid", top_score
+
+    solid = [(raw, doc) for raw, doc in chosen_all if raw >= settings.reranker_solid_score]
+    if solid:
+        return solid, "solid", top_score
+    uncertain = [(raw, doc) for raw, doc in chosen_all if raw >= settings.reranker_uncertain_score]
+    if uncertain:
+        return uncertain[:FALLBACK_TOP_K], "uncertain", top_score
+    return [], "abstain", top_score
 
 
 def _reciprocal_rank_fusion(result_lists: list[list[tuple[float, dict]]]) -> list[tuple[float, dict]]:
@@ -619,11 +648,20 @@ async def _fetch_neighbor_chunks(citations: list[Citation]) -> list[Citation]:
 
 
 class RetrievalResult:
-    __slots__ = ("citations", "low_confidence", "timing")
+    __slots__ = ("citations", "low_confidence", "confidence", "top_score", "timing")
 
-    def __init__(self, citations: list[Citation], low_confidence: bool = False, timing: dict | None = None):
+    def __init__(
+        self,
+        citations: list[Citation],
+        low_confidence: bool = False,
+        confidence: str = "solid",
+        top_score: float = 0.0,
+        timing: dict | None = None,
+    ):
         self.citations = citations
         self.low_confidence = low_confidence
+        self.confidence = confidence  # 'solid' | 'uncertain' | 'abstain'
+        self.top_score = top_score
         self.timing = timing or {}
 
 
@@ -700,22 +738,14 @@ async def retrieve(
     # 4. Reciprocal Rank Fusion across all paths
     all_scored = _reciprocal_rank_fusion(list(all_results))
 
-    # 4b. Boost results whose section_title matches query keywords
-    all_scored = _boost_title_matches(search_query, all_scored)
+    # 4b. Title-match boost affects ORDERING only — keeps the raw score for the gate
+    ranked = _boost_title_matches(search_query, all_scored)
 
-    # 5. Apply reranker thresholds
-    primary = [(s, r) for s, r in all_scored if s >= settings.reranker_min_score]
-
-    if not primary:
-        fallback = [(s, r) for s, r in all_scored if s >= settings.reranker_fallback_score]
-        fallback.sort(key=lambda x: x[0], reverse=True)
-        chosen = fallback[:FALLBACK_TOP_K]
-        low_confidence = bool(chosen)
-        if low_confidence:
-            logger.info("Reranker fallback: using %d results (scores %.2f–%.2f)", len(chosen), chosen[-1][0], chosen[0][0])
-    else:
-        chosen = primary
-        low_confidence = False
+    # 5. Three-band answerability gate on the raw reranker score (0..4 scale)
+    chosen, confidence, top_score = _apply_answerability_gate(ranked)
+    low_confidence = confidence != "solid"
+    if confidence != "solid":
+        logger.info("Answerability gate: confidence=%s top_score=%.2f chosen=%d", confidence, top_score, len(chosen))
 
     # 6. Build citations
     raw_citations: list[Citation] = []
@@ -756,12 +786,15 @@ async def retrieve(
     timing["total_ms"] = round((time.perf_counter() - t0) * 1000, 1)
 
     logger.info(
-        "Retrieved %d citations (from %d raw, low_confidence=%s, %d paths+rrf) for query: %s (filter: %s) [%s]",
-        len(citations), len(raw_citations), low_confidence, len(search_tasks), query[:60],
+        "Retrieved %d citations (from %d raw, confidence=%s, top_score=%.2f, %d paths+rrf) for query: %s (filter: %s) [%s]",
+        len(citations), len(raw_citations), confidence, top_score, len(search_tasks), query[:60],
         filter_expr or "none",
         ", ".join(f"{k}={v}" for k, v in timing.items()),
     )
-    return RetrievalResult(citations=citations, low_confidence=low_confidence, timing=timing)
+    return RetrievalResult(
+        citations=citations, low_confidence=low_confidence,
+        confidence=confidence, top_score=top_score, timing=timing,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -899,15 +932,10 @@ async def retrieve_web(
 
     all_scored = _reciprocal_rank_fusion([hybrid_results, bm25_results])
 
-    primary = [(s, r) for s, r in all_scored if s >= settings.reranker_min_score]
-    if not primary:
-        fallback = [(s, r) for s, r in all_scored if s >= settings.reranker_fallback_score]
-        fallback.sort(key=lambda x: x[0], reverse=True)
-        chosen = fallback[:FALLBACK_TOP_K]
-        low_confidence = bool(chosen)
-    else:
-        chosen = primary
-        low_confidence = False
+    # Web index has no title boost — rank == raw reranker score
+    ranked = [(s, s, doc) for s, doc in all_scored]
+    chosen, confidence, top_score = _apply_answerability_gate(ranked)
+    low_confidence = confidence != "solid"
 
     citations = [_web_doc_to_citation(s, r, i) for i, (s, r) in enumerate(chosen[:top_k], 1)]
     citations = _enforce_diversity(citations)
@@ -917,8 +945,15 @@ async def retrieve_web(
         c.index = i
 
     timing["total_ms"] = round((time.perf_counter() - t0) * 1000, 1)
-    logger.info("Web retrieval: %d citations for: %s [%s]", len(citations), query[:60], ", ".join(f"{k}={v}" for k, v in timing.items()))
-    return RetrievalResult(citations=citations, low_confidence=low_confidence, timing=timing)
+    logger.info(
+        "Web retrieval: %d citations (confidence=%s, top_score=%.2f) for: %s [%s]",
+        len(citations), confidence, top_score, query[:60],
+        ", ".join(f"{k}={v}" for k, v in timing.items()),
+    )
+    return RetrievalResult(
+        citations=citations, low_confidence=low_confidence,
+        confidence=confidence, top_score=top_score, timing=timing,
+    )
 
 
 async def retrieve_combined(
@@ -961,7 +996,22 @@ async def retrieve_combined(
         "regulation_ms": reg_result.timing.get("total_ms", 0),
         "web_ms": web_result.timing.get("total_ms", 0),
     }
-    low_confidence = reg_result.low_confidence and web_result.low_confidence
+    # Inherit the strongest band from the two calibrated sub-retrievals. Cross-index
+    # raw scores aren't directly comparable, so band-merge instead of re-thresholding.
+    if reg_result.confidence == "solid" or web_result.confidence == "solid":
+        confidence = "solid"
+    elif reg_result.citations or web_result.citations:
+        confidence = "uncertain"
+    else:
+        confidence = "abstain"
+    low_confidence = confidence != "solid"
+    top_score = max(reg_result.top_score, web_result.top_score)
 
-    logger.info("Combined retrieval: %d reg + %d web → %d total", len(reg_result.citations), len(web_result.citations), len(all_citations))
-    return RetrievalResult(citations=all_citations, low_confidence=low_confidence, timing=timing)
+    logger.info(
+        "Combined retrieval: %d reg + %d web → %d total (confidence=%s)",
+        len(reg_result.citations), len(web_result.citations), len(all_citations), confidence,
+    )
+    return RetrievalResult(
+        citations=all_citations, low_confidence=low_confidence,
+        confidence=confidence, top_score=top_score, timing=timing,
+    )
