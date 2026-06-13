@@ -12,6 +12,7 @@ class ChatRequest(BaseModel):
     message: str
     history: list[ChatMessage] = []
     program_name: str | None = None
+    model_name: str | None = None
 
 
 class Citation(BaseModel):

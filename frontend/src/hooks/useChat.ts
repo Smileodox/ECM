@@ -6,6 +6,7 @@ import type { ChatMessage, Citation } from "@/types/chat";
 
 const STORAGE_KEY_MESSAGES = "campuslmu_messages";
 const STORAGE_KEY_PROGRAM = "campuslmu_program";
+const STORAGE_KEY_MODEL = "campuslmu_model";
 const MAX_STORED_MESSAGES = 50;
 
 let _msgCounter = 0;
@@ -30,7 +31,15 @@ function loadStoredMessages(): ChatMessage[] {
 
 function loadStoredProgram(): string | null {
   try {
-    return localStorage.getItem(STORAGE_KEY_PROGRAM) || null;
+    return sessionStorage.getItem(STORAGE_KEY_PROGRAM) || null;
+  } catch {
+    return null;
+  }
+}
+
+function loadStoredModel(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_KEY_MODEL) || null;
   } catch {
     return null;
   }
@@ -41,8 +50,10 @@ interface UseChatReturn {
   isStreaming: boolean;
   error: string | null;
   programName: string | null;
+  modelName: string | null;
   detectedLang: string | null;
   setProgramName: (name: string | null) => void;
+  setModelName: (name: string | null) => void;
   sendMessage: (content: string) => Promise<void>;
   stopStreaming: () => void;
   clearMessages: () => void;
@@ -54,11 +65,13 @@ export function useChat(): UseChatReturn {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [programName, setProgramName] = useState<string | null>(null);
+  const [modelName, setModelName] = useState<string | null>(null);
   const [detectedLang, setDetectedLang] = useState<string | null>(null);
 
   useEffect(() => {
     setMessages(loadStoredMessages());
     setProgramName(loadStoredProgram());
+    setModelName(loadStoredModel());
   }, []);
 
   const messagesRef = useRef(messages);
@@ -89,12 +102,22 @@ export function useChat(): UseChatReturn {
   useEffect(() => {
     try {
       if (programName) {
-        localStorage.setItem(STORAGE_KEY_PROGRAM, programName);
+        sessionStorage.setItem(STORAGE_KEY_PROGRAM, programName);
       } else {
-        localStorage.removeItem(STORAGE_KEY_PROGRAM);
+        sessionStorage.removeItem(STORAGE_KEY_PROGRAM);
       }
     } catch { /* ignore */ }
   }, [programName]);
+
+  useEffect(() => {
+    try {
+      if (modelName) {
+        localStorage.setItem(STORAGE_KEY_MODEL, modelName);
+      } else {
+        localStorage.removeItem(STORAGE_KEY_MODEL);
+      }
+    } catch { /* ignore */ }
+  }, [modelName]);
 
   // Cleanup on unmount: abort in-flight request and cancel pending RAF
   useEffect(() => {
@@ -147,7 +170,8 @@ export function useChat(): UseChatReturn {
           content,
           history,
           programName,
-          controller.signal
+          controller.signal,
+          modelName
         );
 
         if (!response.ok) {
@@ -342,7 +366,7 @@ export function useChat(): UseChatReturn {
         setIsStreaming(false);
       }
     },
-    [programName]
+    [programName, modelName]
   );
 
   const stopStreaming = useCallback(() => {
@@ -369,5 +393,5 @@ export function useChat(): UseChatReturn {
     sendMessage(lastUserContent);
   }, [sendMessage]);
 
-  return { messages, isStreaming, error, programName, detectedLang, setProgramName, sendMessage, stopStreaming, clearMessages, retryLast };
+  return { messages, isStreaming, error, programName, modelName, detectedLang, setProgramName, setModelName, sendMessage, stopStreaming, clearMessages, retryLast };
 }

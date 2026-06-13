@@ -117,6 +117,12 @@ async def health():
     return {k: v for k, v in _health_cache.items() if k != "checked_at"}
 
 
+@app.get("/api/models")
+async def list_models():
+    from app.chat.providers import get_available_models
+    return {"models": [{"id": m.id, "label": m.label} for m in get_available_models()]}
+
+
 @app.get("/api/programs")
 async def list_programs():
     from app.chat.engine import _load_program_names_async

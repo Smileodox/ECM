@@ -3,20 +3,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Citation } from "@/types/chat";
 import { useChat } from "@/hooks/useChat";
-import { fetchPrograms } from "@/lib/api";
+import { fetchPrograms, fetchModels } from "@/lib/api";
+import type { ModelOption } from "@/lib/api";
 import { MessageBubble } from "./MessageBubble";
 import { ChatInput } from "./ChatInput";
 import { CitationDrawer } from "./CitationDrawer";
 import { TypingIndicator } from "./TypingIndicator";
 
 export function ChatWindow() {
-  const { messages, isStreaming, error, programName, detectedLang, setProgramName, sendMessage, stopStreaming, clearMessages, retryLast } =
+  const { messages, isStreaming, error, programName, modelName, detectedLang, setProgramName, setModelName, sendMessage, stopStreaming, clearMessages, retryLast } =
     useChat();
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(
     null
   );
   const [programs, setPrograms] = useState<string[]>([]);
   const [programsError, setProgramsError] = useState(false);
+  const [models, setModels] = useState<ModelOption[]>([]);
   const [isScrolled, setIsScrolled] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -29,6 +31,10 @@ export function ChatWindow() {
   }, []);
 
   useEffect(() => { loadPrograms(); }, [loadPrograms]);
+
+  useEffect(() => {
+    fetchModels().then(setModels).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -88,6 +94,18 @@ export function ChatWindow() {
               ))}
             </select>
           ) : null}
+          {models.length > 1 && (
+            <select
+              value={modelName || models[0]?.id || ""}
+              onChange={(e) => setModelName(e.target.value || null)}
+              aria-label="Select model"
+              className="min-w-0 rounded-full border border-border-strong bg-surface px-3 py-1.5 text-xs text-text-secondary focus:border-lmu-green focus:ring-1 focus:ring-lmu-green/20 focus:outline-none transition-colors duration-150"
+            >
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </select>
+          )}
           {messages.length > 0 && (
             <button
               onClick={() => {
