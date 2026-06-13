@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 _YEAR_4DIGIT = re.compile(r"-(\d{4})-[a-z]+\d{2}\.pdf$")
 _YEAR_2DIGIT = re.compile(r"-(\d{2})-[a-z]+\d{2}\.pdf$")
 _YEAR_EMBEDDED = re.compile(r"[a-z](\d{4})-[a-z]+\d{2}\.pdf$")
+_DOC_NUM = re.compile(r"^(\d+)")
+_IS_EIGNUNG_AMENDMENT = re.compile(r"aend.*eign|aenderung.*eign", re.IGNORECASE)
 
 
 def extract_year_from_filename(filename: str) -> int | None:
@@ -30,16 +32,22 @@ def extract_year_from_filename(filename: str) -> int | None:
     return None
 
 
+def _extract_doc_num(filename: str) -> int | None:
+    m = _DOC_NUM.match(filename)
+    return int(m.group(1)) if m else None
+
+
 @dataclass
 class _ProgramDocs:
     psto: list[tuple[str, int | None]] = field(default_factory=list)
     aenderung: list[tuple[str, int | None]] = field(default_factory=list)
+    eignung_base: list[tuple[str, int | None]] = field(default_factory=list)
 
 
 class VersionRegistry:
-    def __init__(self, allowed: set[str], blocked: set[str]):
-        self._allowed = allowed
-        self._blocked = blocked
+    def __init__(self, allowed: set[str] | None = None, blocked: set[str] | None = None):
+        self._allowed = allowed or set()
+        self._blocked = blocked or set()
 
     def is_allowed(self, doc_filename: str) -> bool:
         if doc_filename in self._blocked:
@@ -51,6 +59,8 @@ class VersionRegistry:
 
     @staticmethod
     def build_from_manifest(manifest_path: Path) -> "VersionRegistry":
+        if not manifest_path.exists():
+            return VersionRegistry()
         data = json.loads(manifest_path.read_text())
         entries = data.get("entries", [])
 
@@ -61,15 +71,17 @@ class VersionRegistry:
             doc_type = entry.get("doc_type", "")
             programs = entry.get("programs", [])
 
-            if doc_type not in ("psto", "aenderung"):
-                continue
-
-            year = extract_year_from_filename(filename)
-            for prog in programs:
-                if doc_type == "psto":
-                    by_program[prog].psto.append((filename, year))
-                else:
-                    by_program[prog].aenderung.append((filename, year))
+            if doc_type in ("psto", "aenderung"):
+                year = extract_year_from_filename(filename)
+                for prog in programs:
+                    if doc_type == "psto":
+                        by_program[prog].psto.append((filename, year))
+                    else:
+                        by_program[prog].aenderung.append((filename, year))
+            elif doc_type == "eignung" and not _IS_EIGNUNG_AMENDMENT.search(filename):
+                doc_num = _extract_doc_num(filename)
+                for prog in programs:
+                    by_program[prog].eignung_base.append((filename, doc_num))
 
         allowed: set[str] = set()
         blocked: set[str] = set()
@@ -97,10 +109,23 @@ class VersionRegistry:
                 else:
                     blocked.add(filename)
 
-        # Eignung + Zulassung are always allowed (not added to blocked)
+        for prog, docs in by_program.items():
+            if len(docs.eignung_base) > 1:
+                nums = [n for _, n in docs.eignung_base if n is not None]
+                newest_num = max(nums) if nums else None
+                for filename, num in docs.eignung_base:
+                    if newest_num is not None and num is not None and num < newest_num:
+                        blocked.add(filename)
+                        logger.info("Blocking superseded Eignungssatzung %s (program %s)", filename, prog)
+                    else:
+                        allowed.add(filename)
+            else:
+                for filename, _ in docs.eignung_base:
+                    allowed.add(filename)
+
         all_filenames = {e["filename"] for e in entries}
-        eignung_zulassung = all_filenames - allowed - blocked
-        allowed |= eignung_zulassung
+        remaining = all_filenames - allowed - blocked
+        allowed |= remaining
 
         logger.info(
             "Version registry: %d programs, %d allowed, %d blocked",
