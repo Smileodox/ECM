@@ -26,6 +26,11 @@ hostingstart.html
 
 # Data (re-scrape with python -m app.scraper)
 documents/*.pdf
+documents.zip
+
+# Azure CLI local config & benchmark export artifacts
+.azure/
+benchmark_export/
 
 # Test results
 frontend/test-results/
