@@ -13,6 +13,9 @@ _ELLIPSIS_MARKER_RE = re.compile(r"\[\.{3}\]\s*")
 _CITATION_BLOCK_RE = re.compile(r"\[[^\]]*(?:Quelle|[Ss]ource)\s+\d+[^\]]*\]")
 # Extracts individual citation indices from within a block
 _CITE_INDEX_RE = re.compile(r"(?:Quelle|[Ss]ource)\s+(\d+)")
+# Matches bare "Quelle N" / "Source N" not already inside [...] — LLM sometimes
+# omits the brackets despite instructions; normalize these as a fallback.
+_BARE_CITATION_RE = re.compile(r"(?<!\[)(?:Quelle|[Ss]ource)\s+(\d+)(?!\s*(?:\d|\]))")
 
 
 def format_citation_label(citation: Citation) -> str:
@@ -30,6 +33,8 @@ def extract_used_citation_indices(text: str) -> set[int]:
     for block in _CITATION_BLOCK_RE.finditer(text):
         for m in _CITE_INDEX_RE.finditer(block.group()):
             indices.add(int(m.group(1)))
+    for m in _BARE_CITATION_RE.finditer(text):
+        indices.add(int(m.group(1)))
     return indices
 
 
@@ -46,12 +51,18 @@ def normalize_citation_markers(text: str) -> str:
     """Replace all citation blocks with canonical <<cite:N>> markers.
 
     Handles: [Quelle 1], [source 2], [Quelle 1, §14 Abs. 7; Quelle 2, §31], etc.
+    Also handles bare "Quelle N" without brackets as a fallback.
     """
 
-    def _replace(match: re.Match) -> str:
+    def _replace_block(match: re.Match) -> str:
         return "".join(
             f"<<cite:{m.group(1)}>>"
             for m in _CITE_INDEX_RE.finditer(match.group())
         )
 
-    return _CITATION_BLOCK_RE.sub(_replace, text)
+    def _replace_bare(match: re.Match) -> str:
+        return f"<<cite:{match.group(1)}>>"
+
+    text = _CITATION_BLOCK_RE.sub(_replace_block, text)
+    text = _BARE_CITATION_RE.sub(_replace_bare, text)
+    return text
