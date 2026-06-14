@@ -227,7 +227,10 @@ async def _generate_hyde(query: str) -> str:
                     "Du bist ein Experte für deutsche Hochschulrechtsdokumente. "
                     "Schreibe einen kurzen, fiktiven Paragraphen einer Prüfungs- und Studienordnung (PSTO), "
                     "der die folgende Frage beantworten würde. Schreibe im Stil eines echten PSTO-Dokuments "
-                    "mit §-Nummern, Absätzen und juristischer Fachsprache. Nur den Paragraphen ausgeben, nichts sonst."
+                    "mit §-Nummern, Absätzen und juristischer Fachsprache. Nur den Paragraphen ausgeben, nichts sonst. "
+                    "WICHTIG: Erfinde KEINE konkreten Zahlen (z.B. Anzahl der Prüfungsversuche, ECTS-Punkte, Semesterzahl), "
+                    "wenn du sie nicht sicher kennst — beschreibe stattdessen die Art der Regelung und die "
+                    "einschlägige Fachterminologie (z.B. 'Wiederholung', 'Bestehen', 'beliebig oft', 'Regelstudienzeit')."
                 )},
                 {"role": "user", "content": query},
             ],
@@ -401,6 +404,51 @@ def _enforce_diversity(citations: list[Citation]) -> list[Citation]:
     return diverse
 
 
+# Student-vocabulary → PSTO-legal-vocabulary bridge.
+# Keys are student/everyday terms (DE + EN); values are the German legal terms
+# used in the actual regulation documents. Used to:
+#   1. Augment the BM25 query string so first-stage retrieval surfaces the right §
+#   2. Add a concept vector path (embedded German terms, language-neutral)
+#   3. Extend title-match boosting even when query uses different vocabulary
+_DOMAIN_EXPANSIONS: dict[str, list[str]] = {
+    # Prüfungsversuche / exam attempts
+    "prüfungsversuch":      ["Wiederholung der Modulprüfung", "beliebig oft", "nicht bestanden"],
+    "prüfungsversuche":     ["Wiederholung der Modulprüfung", "beliebig oft", "nicht bestanden"],
+    "klausurversuch":       ["Wiederholung der Modulprüfung", "beliebig oft"],
+    "klausurversuche":      ["Wiederholung der Modulprüfung", "beliebig oft"],
+    "durchgefallen":        ["nicht bestanden", "Wiederholung der Modulprüfung"],
+    "exam attempt":         ["Wiederholung der Modulprüfung", "beliebig oft", "nicht bestanden"],
+    "exam attempts":        ["Wiederholung der Modulprüfung", "beliebig oft", "nicht bestanden"],
+    "retake":               ["Wiederholung", "nicht bestanden", "Wiederholungsprüfung"],
+    "failed exam":          ["nicht bestanden", "Wiederholung der Modulprüfung"],
+    "how many times":       ["Wiederholung", "beliebig oft"],
+    # Note appeal / Widerspruch
+    "note anfechten":       ["Widerspruch", "Prüfungsergebnis", "Einsicht", "Prüfungsamt"],
+    "grade appeal":         ["Widerspruch", "Prüfungsergebnis", "Einsicht"],
+    "appeal grade":         ["Widerspruch", "Prüfungsergebnis", "Einsicht"],
+    # Thesis consequences
+    "masterarbeit abgabe":  ["nicht bestanden", "Nichtbestehen", "Wiederholung der Masterarbeit"],
+    "thesis deadline":      ["nicht bestanden", "Nichtbestehen", "Wiederholung der Masterarbeit"],
+    "late submission":      ["nicht bestanden", "Nichtbestehen", "Fristversäumnis"],
+}
+
+
+def _domain_expand(query: str) -> list[str]:
+    """Return PSTO legal terms that bridge vocabulary gaps in the query."""
+    ql = query.lower()
+    terms: list[str] = []
+    for surface, legal in _DOMAIN_EXPANSIONS.items():
+        if surface in ql:
+            terms.extend(legal)
+    seen: set[str] = set()
+    out: list[str] = []
+    for t in terms:
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out
+
+
 _TITLE_SYNONYMS: dict[str, list[str]] = {
     "prüfungsformen": ["prüfung", "prüfungen", "art der prüfung"],
     "prüfungsform": ["prüfung", "prüfungen", "art der prüfung"],
@@ -433,6 +481,10 @@ def _boost_title_matches(query: str, scored: list[tuple[float, dict]]) -> list[t
         for syn_key, syn_values in _TITLE_SYNONYMS.items():
             if kw.startswith(syn_key) or syn_key.startswith(kw):
                 expanded_keywords.update(syn_values)
+    # Also fold domain expansion terms so queries using student vocabulary
+    # (e.g. "Prüfungsversuche") boost §-titles using legal vocabulary ("Wiederholung")
+    for term in _domain_expand(query):
+        expanded_keywords.update(w.lower() for w in term.split() if len(w) >= 4)
 
     boosted: list[tuple[float, float, dict]] = []
     for raw, doc in scored:
@@ -690,11 +742,21 @@ async def retrieve(
     t1 = time.perf_counter()
 
     if query_type in ("factual",):
-        # Precision mode: skip HyDE and expansions, only direct search
-        # This avoids noise from generated content matching generic sections
-        orig_vector = await _embed_query(search_query)
+        # Precision mode: skip HyDE and generative expansions to avoid noise.
+        # Domain expansions (static vocabulary bridge) are still applied:
+        # they close lexical gaps without the hallucination risk of LLM-generated content.
+        domain_terms = _domain_expand(search_query)
+        coros: list = [_embed_query(search_query)]
+        if domain_terms:
+            coros.append(_embed_query(" ".join(domain_terms)))
+        embed_results_factual = await asyncio.gather(*coros)
+        orig_vector = embed_results_factual[0]
+        concept_vector: list[float] | None = embed_results_factual[1] if domain_terms else None
         expansion_vectors: list[list[float]] = []
-        logger.info("Factual query — using precision mode (2 search paths)")
+        logger.info(
+            "Factual query — precision mode (%d search paths, domain_terms=%d)",
+            3 if concept_vector else 2, len(domain_terms),
+        )
     else:
         # Full mode: all 5 paths for complex queries
         hyde_text, orig_vector, expansions = await asyncio.gather(
@@ -717,11 +779,14 @@ async def retrieve(
     t2 = time.perf_counter()
 
     if query_type in ("factual",):
-        # Precision mode: only original vector + BM25 (2 paths)
+        # Precision mode: original vector + BM25 (augmented with domain terms) + optional concept vector
+        bm25_query = (search_query + " " + " ".join(domain_terms)).strip() if domain_terms else search_query
         search_tasks = [
             _search_with_vector(search_query, orig_vector, filter_expr, top_k),
-            _search_bm25_only(search_query, filter_expr, top_k),
+            _search_bm25_only(bm25_query, filter_expr, top_k),
         ]
+        if concept_vector is not None:
+            search_tasks.append(_search_with_vector(search_query, concept_vector, filter_expr, top_k))
     else:
         # Full mode: HyDE vector + original vector + BM25 + expansion vectors
         hyde_vector = embed_results[0]

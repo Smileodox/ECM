@@ -163,7 +163,7 @@ _FACULTY_FSB_URLS: dict[str, list[str]] = {
     ],
 }
 
-_FSB_OVERVIEW_URL = "https://www.lmu.de/de/workspace-fuer-studierende/1x1-des-studiums/fachstudienberatung/"
+FSB_OVERVIEW_URL = "https://www.lmu.de/de/workspace-fuer-studierende/1x1-des-studiums/fachstudienberatung/"
 
 _PROGRAM_TO_FSB: dict[str, str] = {}
 for _url, _programs in _FACULTY_FSB_URLS.items():
@@ -173,7 +173,7 @@ for _url, _programs in _FACULTY_FSB_URLS.items():
 
 def get_fsb_url(program_name: str) -> str:
     """Return the faculty-specific Fachstudienberatung URL for a program."""
-    return _PROGRAM_TO_FSB.get(program_name, _FSB_OVERVIEW_URL)
+    return _PROGRAM_TO_FSB.get(program_name, FSB_OVERVIEW_URL)
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +257,7 @@ _FACULTY_PRUEFUNGSAMT_URLS: dict[str, list[str]] = {
     ],
 }
 
-_PRUEFUNGSAMT_OVERVIEW_URL = ESCALATION_CONTACTS["pruefungsamt"]["url"]
+PRUEFUNGSAMT_OVERVIEW_URL = ESCALATION_CONTACTS["pruefungsamt"]["url"]
 
 _PROGRAM_TO_PRUEFUNGSAMT: dict[str, str] = {}
 for _url, _programs in _FACULTY_PRUEFUNGSAMT_URLS.items():
@@ -267,7 +267,7 @@ for _url, _programs in _FACULTY_PRUEFUNGSAMT_URLS.items():
 
 def get_pruefungsamt_url(program_name: str) -> str:
     """Return the faculty-specific Prüfungsamt URL for a program, or the generic list."""
-    return _PROGRAM_TO_PRUEFUNGSAMT.get(program_name, _PRUEFUNGSAMT_OVERVIEW_URL)
+    return _PROGRAM_TO_PRUEFUNGSAMT.get(program_name, PRUEFUNGSAMT_OVERVIEW_URL)
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +297,7 @@ _ESCALATION_ROUTING: dict[str, list[str]] = {
     "regulation:contact": ["pruefungsamt"],
     "general:administrative": ["studentenkanzlei"],
     "general:deadline": ["studentenkanzlei"],
-    "general:contact": ["studienberatung"],
+    "general:contact": ["fachstudienberatung", "studienberatung"],
     "general:process": ["studentenkanzlei", "studienberatung"],
     "general:factual": ["studienberatung"],
     "general:default": ["studienberatung"],

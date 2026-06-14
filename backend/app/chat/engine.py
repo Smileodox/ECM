@@ -11,7 +11,13 @@ import tiktoken
 from openai import AsyncAzureOpenAI
 
 from app.chat.citations import extract_used_citation_indices, normalize_citation_markers, strip_for_display
-from app.chat.escalation import ESCALATION_CONTACTS
+from app.chat.escalation import (
+    ESCALATION_CONTACTS,
+    FSB_OVERVIEW_URL,
+    PRUEFUNGSAMT_OVERVIEW_URL,
+    get_fsb_url,
+    get_pruefungsamt_url,
+)
 from app.chat.few_shot import classify_query
 from app.chat.grounding import verify_grounding
 from app.chat.prompts import (
@@ -537,7 +543,7 @@ async def chat_stream(
     yield _sse("language", {"lang": lang})
 
     # Program detection: only for REGULATION and BOTH routes
-    need_program = not program_name and route != QueryRoute.GENERAL
+    need_program = not program_name  # detect for all routes — used in escalation contact URLs
     if need_program:
         program_name = await _detect_program_from_context(message, history)
     if program_name and not program_was_provided:
@@ -608,6 +614,21 @@ async def chat_stream(
         context = build_context(trimmed_citations)
         logger.info("Context trimmed from %d to %d citations to fit budget", len(citations), len(trimmed_citations))
         citations = trimmed_citations
+
+    # Inject program-specific contact URLs so the LLM cites them directly instead
+    # of falling back to generic URLs from web citations or the regulations index.
+    if program_name:
+        contact_hints: list[str] = []
+        fsb_url = get_fsb_url(program_name)
+        if fsb_url != FSB_OVERVIEW_URL:
+            contact_hints.append(f"Fachstudienberatung {program_name}: {fsb_url}")
+        pa_url = get_pruefungsamt_url(program_name)
+        if pa_url != PRUEFUNGSAMT_OVERVIEW_URL:
+            contact_hints.append(f"Prüfungsamt {program_name}: {pa_url}")
+        if contact_hints:
+            context += "\n\n---\n\n**Programmspezifische Anlaufstellen:**\n" + "\n".join(
+                f"- {h}" for h in contact_hints
+            )
 
     # Note: low-confidence is surfaced as a VISIBLE uncertainty notice + a constrained
     # system prompt below — not buried as a context hint the model can ignore.

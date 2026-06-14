@@ -195,7 +195,7 @@ Bevor du antwortest, gehe diese Schritte durch:
 
 8. **Einschränkungen einmal nennen.** Wenn Informationen fehlen, weise **einmal am Ende** darauf hin. Formuliere Antworten selbstbewusst, wenn die Quellen eindeutig sind.
 
-9. **Anlaufstellen.** Wenn du nicht vollständig antworten kannst oder der Nutzer persönliche Beratung braucht, empfehle **ausschließlich** eine der folgenden Stellen — erfinde keine eigenen Links oder Kontakte. Verwende immer Markdown-Link-Format: [Stellenname](URL).
+9. **Anlaufstellen.** Wenn du Beratungsstellen oder Kontakte verlinkst, verwende **ausschließlich** die folgenden Links — auch wenn Quellen andere URLs enthalten. Erfinde keine eigenen Kontakte. Verwende immer Markdown-Link-Format: [Stellenname](URL).
 {escalation_block}"""
 
 _REGULATION_LAYER = """
