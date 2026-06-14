@@ -702,13 +702,15 @@ async def chat_stream(
     #     unless the model already linked Studienberatung / International Office itself.
     advisory_disclaimer_added = False
     if "studienangebot" in content_types:
-        _advisory_urls = (
-            ESCALATION_CONTACTS["studienberatung"]["url"],
-            ESCALATION_CONTACTS["international"]["url"],
-            ESCALATION_CONTACTS["international"]["url_en"],
-        )
-        if not any(u in full_response for u in _advisory_urls):
-            disclaimer = build_advisory_disclaimer(lang=lang, include_international=(lang == "en"))
+        sb_url = ESCALATION_CONTACTS["studienberatung"]["url"]
+        io_urls = (ESCALATION_CONTACTS["international"]["url"], ESCALATION_CONTACTS["international"]["url_en"])
+        has_referral = sb_url in full_response or any(u in full_response for u in io_urls)
+        has_io = any(u in full_response for u in io_urls)
+        want_io = lang == "en"  # international applicants should also see the International Office
+        if not has_referral or (want_io and not has_io):
+            disclaimer = build_advisory_disclaimer(
+                lang=lang, include_international=want_io, referral_present=has_referral,
+            )
             full_response += disclaimer
             yield _sse("token", {"content": disclaimer})
             advisory_disclaimer_added = True

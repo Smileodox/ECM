@@ -106,14 +106,17 @@ def build_grounding_retraction(
     )
 
 
-def build_advisory_disclaimer(lang: str = "de", include_international: bool = False) -> str:
+def build_advisory_disclaimer(
+    lang: str = "de", include_international: bool = False, referral_present: bool = False,
+) -> str:
     """Appended to advisory (program-selection) answers.
 
     The advisory path ("what can I study with degree X?") is covered by neither the
     answerability score gate nor the grounding verifier, so this guarantees a
     not-binding-advice disclaimer + hand-off to human advising regardless of what the
     model produced. include_international adds the International Office (for international
-    applicants, e.g. English-language queries).
+    applicants, e.g. English-language queries). referral_present: the answer already links
+    an advising contact -> emit only the International Office pointer (no duplicate disclaimer).
     """
     sb = ESCALATION_CONTACTS["studienberatung"]
     io = ESCALATION_CONTACTS["international"]
@@ -122,20 +125,33 @@ def build_advisory_disclaimer(lang: str = "de", include_international: bool = Fa
     sb_link = f"[{sb[name_key]}]({sb[url_key]})"
     io_link = f"[{io[name_key]}]({io[url_key]})"
 
+    if referral_present:
+        # An advising referral already exists; only add the International Office pointer.
+        if lang == "en":
+            return (
+                f"\n\nℹ️ For international application, recognition of your degree, or visa "
+                f"questions, the {io_link} is also the right contact."
+            )
+        return (
+            f"\n\nℹ️ Für internationale Bewerbung, Anerkennung deines Abschlusses oder "
+            f"Visumsfragen ist außerdem das {io_link} die richtige Anlaufstelle."
+        )
+
+    # Kept deliberately neutral so it also fits program *process* answers (where
+    # studienangebot sources are retrieved too): the no-eligibility-claim guardrail lives
+    # in _ADVISORY_LAYER (model-side), this fallback only guarantees a hand-off.
     if lang == "en":
         msg = (
             "\n\n---\n\n⚠️ **This is general orientation, not binding study advice.** "
-            "Whether your specific background qualifies you for a program is decided solely "
-            f"by the university. Please confirm your options with the {sb_link}"
+            f"For your specific situation, the {sb_link}"
         )
-        msg += f" and the {io_link}." if include_international else "."
+        msg += f" or the {io_link} can help." if include_international else " can help."
     else:
         msg = (
             "\n\n---\n\n⚠️ **Das ist eine unverbindliche Orientierung, keine verbindliche "
-            "Studienberatung.** Ob dein konkreter Hintergrund für einen Studiengang ausreicht, "
-            f"entscheidet allein die Universität. Lass deine Möglichkeiten bei der {sb_link}"
+            f"Studienberatung.** Für deine konkrete Situation hilft die {sb_link}"
         )
-        msg += f" und dem {io_link} bestätigen." if include_international else " bestätigen."
+        msg += f" oder das {io_link}." if include_international else "."
     return msg
 
 
@@ -233,7 +249,7 @@ Die Frage zielt auf die Wahl eines Studiengangs oder die Eignung eines Hintergru
 - **Beurteile NIE verbindlich, ob der Hintergrund des Nutzers für die Zulassung ausreicht.** Sage nicht "du qualifizierst dich" oder "du wirst zugelassen" — die Eignung prüft allein die Universität.
 - Formuliere Vorschläge als unverbindliche Orientierung ("infrage kommen könnten …").
 - Erfinde keine Studiengänge, Voraussetzungen oder NC-Werte, die nicht in den Quellen stehen.
-- Schließe mit dem Hinweis, dass dies keine verbindliche Studienberatung ist, und verweise auf die Zentrale Studienberatung (bei internationalen Bewerbungen zusätzlich das International Office)."""
+- Schließe mit dem Hinweis, dass dies keine verbindliche Studienberatung ist, und verweise auf die Zentrale Studienberatung. Wenn die Frage auf Englisch gestellt ist oder internationale Bewerbung, Anerkennung oder Visum betrifft, nenne zusätzlich immer das International Office."""
 
 
 _LANG_DE = (

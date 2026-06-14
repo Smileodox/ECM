@@ -85,6 +85,10 @@ class TestHandoffPrompts:
         r = build_grounding_retraction(route="regulation", lang="en")
         assert "Please verify" in r
 
-    def test_pruefungsamt_url_falls_back_to_generic(self):
-        # Map intentionally unpopulated -> generic list page (no invented URLs).
-        assert "pruefungsaemter" in get_pruefungsamt_url("Informatik")
+    def test_pruefungsamt_url_maps_known_program(self):
+        # Map populated (2026-06): a mapped program -> its faculty exam office, not the list.
+        assert "isc" in get_pruefungsamt_url("Betriebswirtschaftslehre")  # ISC = business exams
+
+    def test_pruefungsamt_url_falls_back_to_generic_when_unmapped(self):
+        # Unmapped program (no verified dedicated page) -> generic list page (no invented URLs).
+        assert get_pruefungsamt_url("Tiermedizin").endswith("/pruefungsaemter/")

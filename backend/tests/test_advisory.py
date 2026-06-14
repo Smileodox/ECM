@@ -40,6 +40,13 @@ class TestAdvisoryDisclaimer:
         assert "International Office" in msg
         assert "/en/" in msg  # International Office url_en is the English page
 
+    def test_referral_present_emits_io_only(self):
+        # When the answer already links an advising contact, only the IO pointer is added.
+        msg = build_advisory_disclaimer(lang="en", include_international=True, referral_present=True)
+        assert "International Office" in msg
+        assert "not binding study advice" not in msg   # short pointer, not the full disclaimer
+        assert "Central Student Advisory" not in msg    # Studienberatung not duplicated
+
     def test_never_asserts_eligibility(self):
         for lang in ("de", "en"):
             msg = build_advisory_disclaimer(lang=lang)
@@ -152,3 +159,18 @@ async def test_advisory_english_adds_international_office(advisory_net, monkeypa
 
     assert "not binding study advice" in tokens
     assert "International Office" in tokens                   # English query -> international applicant
+
+
+@pytest.mark.asyncio
+async def test_advisory_english_forces_io_even_when_studienberatung_present(advisory_net, monkeypatch):
+    sb_url = "https://www.lmu.de/de/studium/wichtige-kontakte/zentrale-studienberatung/"
+
+    async def _stream(*a, **k):
+        yield "Consider the Master in Management [Quelle 1]. "
+        yield f"See the [Central Student Advisory Services]({sb_url})."
+    monkeypatch.setattr("app.chat.providers.stream_chat", _stream)
+
+    tokens = _tokens(await _collect(engine.chat_stream(_EN_ADVISORY, [], request_id="a4")))
+
+    assert "International Office" in tokens                       # IO enforced for EN even with SB present
+    assert tokens.count("Central Student Advisory Services") == 1  # model's SB link not duplicated
