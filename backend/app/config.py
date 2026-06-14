@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     # Feedback — /home/feedback is persistent on Azure App Service
     feedback_dir: str = "/home/feedback"
 
+    # User study logging — Azure Table Storage (optional; logging silently skipped if unset)
+    azure_storage_connection_string: str | None = None
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

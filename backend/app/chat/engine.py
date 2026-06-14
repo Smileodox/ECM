@@ -497,6 +497,8 @@ async def chat_stream(
     program_name: str | None = None,
     model_name: str | None = None,
     request_id: str = "-",
+    subject_id: str | None = None,
+    study_session_id: str | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Stream a RAG-augmented chat response.
 
@@ -762,6 +764,24 @@ async def chat_stream(
     logger.debug("Chat stream completed: %s", ", ".join(f"{k}={v}" for k, v in timing.items()))
     yield _sse("metrics", {**timing, "confidence": confidence, "verification": verification})
     yield _sse("done", {})
+
+    if subject_id and study_session_id and settings.azure_storage_connection_string:
+        from app.chat.study_logger import log_turn
+        asyncio.create_task(log_turn(
+            subject_id=subject_id,
+            study_session_id=study_session_id,
+            turn_index=len(history),
+            question=message,
+            answer=full_response,
+            program_name=program_name,
+            route=route.value,
+            query_type=query_type,
+            answerability_score=round(result.top_score, 3),
+            num_citations=len(used_citations),
+            total_ms=timing["total_ms"],
+            language=lang,
+            connection_string=settings.azure_storage_connection_string,
+        ))
 
     cited_sections = sorted({c.section_id for c in citations if c.index in used_indices and c.section_id})
     _audit_turn(

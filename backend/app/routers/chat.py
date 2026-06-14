@@ -33,6 +33,8 @@ async def chat(request: Request, body: ChatRequest):
                     body.message, body.history,
                     program_name=body.program_name, model_name=body.model_name,
                     request_id=request_id,
+                    subject_id=body.subject_id,
+                    study_session_id=body.study_session_id,
                 ):
                     if await request.is_disconnected():
                         return

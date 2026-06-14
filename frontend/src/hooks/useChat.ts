@@ -7,6 +7,7 @@ import type { ChatMessage, Citation } from "@/types/chat";
 const STORAGE_KEY_MESSAGES = "campuslmu_messages";
 const STORAGE_KEY_PROGRAM = "campuslmu_program";
 const STORAGE_KEY_MODEL = "campuslmu_model";
+const STORAGE_KEY_STUDY_SESSION = "campuslmu_study_session";
 const MAX_STORED_MESSAGES = 50;
 
 let _msgCounter = 0;
@@ -45,6 +46,10 @@ function loadStoredModel(): string | null {
   }
 }
 
+interface UseChatOptions {
+  subjectId?: string | null;
+}
+
 interface UseChatReturn {
   messages: ChatMessage[];
   isStreaming: boolean;
@@ -60,18 +65,28 @@ interface UseChatReturn {
   retryLast: () => void;
 }
 
-export function useChat(): UseChatReturn {
+export function useChat({ subjectId }: UseChatOptions = {}): UseChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [programName, setProgramName] = useState<string | null>(null);
   const [modelName, setModelName] = useState<string | null>(null);
   const [detectedLang, setDetectedLang] = useState<string | null>(null);
+  const studySessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setMessages(loadStoredMessages());
     setProgramName(loadStoredProgram());
     setModelName(loadStoredModel());
+    // Restore or create a study session ID for this browser session
+    try {
+      let sid = sessionStorage.getItem(STORAGE_KEY_STUDY_SESSION);
+      if (!sid) {
+        sid = crypto.randomUUID();
+        sessionStorage.setItem(STORAGE_KEY_STUDY_SESSION, sid);
+      }
+      studySessionIdRef.current = sid;
+    } catch { /* ignore */ }
   }, []);
 
   const messagesRef = useRef(messages);
@@ -171,7 +186,9 @@ export function useChat(): UseChatReturn {
           history,
           programName,
           controller.signal,
-          modelName
+          modelName,
+          subjectId,
+          studySessionIdRef.current,
         );
 
         if (!response.ok) {

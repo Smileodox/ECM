@@ -10,9 +10,9 @@ import { ChatInput } from "./ChatInput";
 import { CitationDrawer } from "./CitationDrawer";
 import { TypingIndicator } from "./TypingIndicator";
 
-export function ChatWindow() {
+export function ChatWindow({ subjectId }: { subjectId?: string | null }) {
   const { messages, isStreaming, error, programName, modelName, detectedLang, setProgramName, setModelName, sendMessage, stopStreaming, clearMessages, retryLast } =
-    useChat();
+    useChat({ subjectId });
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(
     null
   );

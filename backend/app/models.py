@@ -13,6 +13,8 @@ class ChatRequest(BaseModel):
     history: list[ChatMessage] = []
     program_name: str | None = None
     model_name: str | None = None
+    subject_id: str | None = None
+    study_session_id: str | None = None
 
 
 class Citation(BaseModel):

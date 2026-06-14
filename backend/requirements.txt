@@ -19,3 +19,4 @@ redis[hiredis]>=5.2
 lingua-language-detector>=2.2
 markdownify>=0.14
 beautifulsoup4>=4.12
+azure-data-tables>=12.5

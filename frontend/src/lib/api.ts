@@ -5,7 +5,9 @@ export async function fetchChatStream(
   history: { role: string; content: string }[],
   programName?: string | null,
   signal?: AbortSignal,
-  modelName?: string | null
+  modelName?: string | null,
+  subjectId?: string | null,
+  studySessionId?: string | null,
 ): Promise<Response> {
   return fetch(`${API_BASE}/api/chat`, {
     method: "POST",
@@ -15,6 +17,8 @@ export async function fetchChatStream(
       history,
       program_name: programName || null,
       model_name: modelName || null,
+      subject_id: subjectId || null,
+      study_session_id: studySessionId || null,
     }),
     signal,
   });
