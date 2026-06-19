@@ -76,14 +76,22 @@ class VersionRegistry:
             doc_type = entry.get("doc_type", "")
             programs = entry.get("programs", [])
 
-            if doc_type in ("psto", "aenderung"):
+            # Amendments to an EIGNUNGSSATZUNG are often classified doc_type="aenderung",
+            # but they belong to the Eignung lineage — NOT the PSTO. They must NEVER be
+            # folded into the PSTO amendment comparison, or they get blocked as "older than
+            # the newest PSTO" and wrongly purged (e.g. the BWL one moving a deadline
+            # Juni->Mai). Skip them entirely so they always remain allowed.
+            if _IS_EIGNUNG_AMENDMENT.search(filename):
+                continue
+            if doc_type == "psto":
                 year = extract_year_from_filename(filename)
                 for prog in programs:
-                    if doc_type == "psto":
-                        by_program[prog].psto.append((filename, year))
-                    else:
-                        by_program[prog].aenderung.append((filename, year))
-            elif doc_type == "eignung" and not _IS_EIGNUNG_AMENDMENT.search(filename):
+                    by_program[prog].psto.append((filename, year))
+            elif doc_type == "aenderung":
+                year = extract_year_from_filename(filename)
+                for prog in programs:
+                    by_program[prog].aenderung.append((filename, year))
+            elif doc_type == "eignung":
                 doc_num = _extract_doc_num(filename)
                 for prog in programs:
                     by_program[prog].eignung_base.append((filename, doc_num))

@@ -33,9 +33,15 @@ _QUERY_TYPES = {
         re.IGNORECASE,
     ),
     "contact": re.compile(
-        r"(?:wo (?:finde|ist|kann)|kontakt|ansprech(?:partner|person|partnerin)|"
-        r"an wen|anlaufstelle|studienberatung|prüfungsamt|studentenkanzlei|"
-        r"where can i|who do i|who can i|whom|contact person)",
+        # Genuine "who/which office do I contact" intent only — NOT every "where can I <do X>"
+        # ("where can I check my status / do the transfer" must not classify as contact).
+        r"(?:kontakt|ansprech(?:partner|person|partnerin)|an wen|anlaufstelle|"
+        r"wer (?:ist zuständig|kann mir helfen|hilft mir)|wen (?:frage|kontaktiere) ich|"
+        r"wo bekomme ich (?:hilfe|beratung)|"
+        r"studienberatung|prüfungsamt|studentenkanzlei|fachstudienberatung|"
+        r"\bcontact\b|contact person|who is responsible|"
+        r"(?:who|whom) (?:do|can|should|shall) i (?:contact|ask|reach|approach|talk to|turn to)|"
+        r"where can i get (?:help|advice|support))",
         re.IGNORECASE,
     ),
     "process": re.compile(
