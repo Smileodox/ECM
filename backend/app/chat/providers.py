@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -6,7 +7,7 @@ from functools import lru_cache
 from typing import AsyncGenerator
 
 import httpx
-from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai import APIConnectionError, APITimeoutError, AsyncAzureOpenAI, AsyncOpenAI, RateLimitError
 
 from app.config import settings
 
@@ -98,13 +99,29 @@ async def stream_chat(
     else:
         client = _azure_openai_client()
 
-    stream = await client.chat.completions.create(
-        model=model_id,
-        messages=messages,
-        temperature=temperature,
-        max_completion_tokens=max_tokens,
-        stream=True,
-    )
+    # Open the stream with a short bounded retry. Rate-limit (429 / TPM bursts) and
+    # transient connection errors occur at request-open, BEFORE any token is yielded,
+    # so retrying here is safe and never replays partial output.
+    last_exc: Exception | None = None
+    stream = None
+    for attempt in range(4):  # 1 try + 3 retries
+        if attempt:
+            await asyncio.sleep((0.5, 1.5, 3.0)[attempt - 1])
+        try:
+            stream = await client.chat.completions.create(
+                model=model_id,
+                messages=messages,
+                temperature=temperature,
+                max_completion_tokens=max_tokens,
+                stream=True,
+            )
+            break
+        except (RateLimitError, APIConnectionError, APITimeoutError) as e:
+            last_exc = e
+            logger.warning("stream_chat open failed (%s), retry %d/3", type(e).__name__, attempt + 1)
+    else:
+        raise last_exc  # all attempts exhausted
+
     async for chunk in stream:
         if chunk.choices and chunk.choices[0].delta.content:
             yield chunk.choices[0].delta.content

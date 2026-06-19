@@ -303,6 +303,7 @@ _ESCALATION_ROUTING: dict[str, list[str]] = {
     "general:default": ["studienberatung"],
     "both:eligibility": ["pruefungsamt", "studentenkanzlei"],
     "both:process": ["studentenkanzlei", "pruefungsamt"],
+    "both:contact": ["fachstudienberatung", "pruefungsamt"],
     "both:default": ["studienberatung", "pruefungsamt"],
 }
 

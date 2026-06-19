@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 
 from azure.core.credentials import AzureKeyCredential
@@ -20,14 +21,14 @@ from azure.search.documents.indexes.models import (
 )
 from collections import defaultdict
 
-from openai import AzureOpenAI, BadRequestError, RateLimitError
+from openai import APIConnectionError, APITimeoutError, AzureOpenAI, BadRequestError, RateLimitError
 
 from app.config import settings
 from app.ingestion.chunker import Chunk
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_BATCH_SIZE = 8
+EMBEDDING_BATCH_SIZE = int(os.environ.get("EMBEDDING_BATCH_SIZE", "8"))
 
 
 def _get_openai_client() -> AzureOpenAI:
@@ -201,9 +202,16 @@ def embed_chunks(chunks: list[Chunk]) -> list[list[float]]:
                 )
                 break
             except Exception as e:
-                if "429" in str(e) or "rate" in str(e).lower():
+                transient = (
+                    isinstance(e, (RateLimitError, APIConnectionError, APITimeoutError))
+                    or "429" in str(e)
+                    or "rate" in str(e).lower()
+                    or "connection" in str(e).lower()
+                    or "disconnected" in str(e).lower()
+                )
+                if transient:
                     wait = min(10 * (2 ** attempt), 120)
-                    logger.warning("Rate limited (attempt %d), retrying in %ds...", attempt + 1, wait)
+                    logger.warning("Embedding transient error (%s) attempt %d, retrying in %ds...", type(e).__name__, attempt + 1, wait)
                     time.sleep(wait)
                 else:
                     raise

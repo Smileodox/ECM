@@ -7,21 +7,16 @@ param location string
 @description('SKU for the Cognitive Services account')
 param sku string = 'S0'
 
-@description('Model deployments — array of {name, model, version, skuName, capacity}')
-param deployments array = [
-  { name: 'gpt-5.4',       model: 'gpt-5.4',              version: '2026-03-05', skuName: 'GlobalStandard', capacity: 10 }
-  { name: 'gpt-5.4-nano',  model: 'gpt-5.4-nano',         version: '2026-03-17', skuName: 'GlobalStandard', capacity: 10 }
-  { name: 'gpt-5.1',       model: 'gpt-5.1',              version: '2025-11-13', skuName: 'GlobalStandard', capacity: 10 }
-  { name: 'gpt-5-mini',    model: 'gpt-5-mini',           version: '2025-08-07', skuName: 'GlobalStandard', capacity: 10 }
-  { name: 'gpt-5-nano',    model: 'gpt-5-nano',           version: '2025-08-07', skuName: 'GlobalStandard', capacity: 10 }
-  { name: 'gpt-4.1',       model: 'gpt-4.1',              version: '2025-04-14', skuName: 'GlobalStandard', capacity: 10 }
-  { name: 'gpt-4.1-mini',  model: 'gpt-4.1-mini',         version: '2025-04-14', skuName: 'GlobalStandard', capacity: 10 }
-  { name: 'text-embedding-3-small', model: 'text-embedding-3-small', version: '1', skuName: 'Standard', capacity: 30 }
-]
+@description('Tags applied to the resource')
+param tags object = {}
+
+@description('Model deployments — array of {name, model, version, skuName, capacity}. Supplied by main.bicep (single source of truth, overridable per environment for differing model/SKU quota).')
+param deployments array
 
 resource openaiAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   name: name
   location: location
+  tags: tags
   kind: 'OpenAI'
   sku: {
     name: sku
@@ -59,3 +54,7 @@ output id string = openaiAccount.id
 
 @description('Name of the Azure OpenAI account')
 output name string = openaiAccount.name
+
+@description('Primary API key of the Azure OpenAI account')
+#disable-next-line outputs-should-not-contain-secrets
+output key string = openaiAccount.listKeys().key1

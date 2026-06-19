@@ -9,11 +9,10 @@ interface CitationChipProps {
 
 export function CitationChip({ citation, onClick }: CitationChipProps) {
   const isWeb = citation.doc_type === "web_1x1";
-  const label = isWeb
-    ? `Quelle ${citation.index}`
-    : citation.absatz
-      ? `${citation.section_id}, ${citation.absatz}`
-      : citation.section_id;
+  // Compact footnote-style marker. The specific paragraph is already written inline in the
+  // answer prose, and the full section/absatz/page detail lives in the tooltip + drawer — so
+  // the chip stays a clean "Quelle N" pointer instead of repeating a (often mismatched) range.
+  const label = `Quelle ${citation.index}`;
 
   const chipClass = isWeb
     ? "inline-flex items-center gap-1 rounded-full bg-teal-50 border border-teal-200 px-2.5 py-0.5 text-xs font-medium text-teal-700 hover:bg-teal-100 hover:shadow-sm hover:scale-105 active:scale-100 transition-all duration-150 cursor-pointer align-baseline animate-chip-highlight"
@@ -21,7 +20,7 @@ export function CitationChip({ citation, onClick }: CitationChipProps) {
 
   const titleText = isWeb
     ? `${citation.doc_name}: ${citation.section_title}`
-    : `${citation.section_id} ${citation.section_title}${citation.page_number > 0 ? `, p. ${citation.page_number}` : ""}`;
+    : `${citation.section_id} ${citation.section_title}${citation.absatz ? `, ${citation.absatz}` : ""}${citation.page_number > 0 ? `, p. ${citation.page_number}` : ""}`;
 
   return (
     <button

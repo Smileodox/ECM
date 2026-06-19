@@ -13,9 +13,13 @@ param capacity int = 0
 @description('SKU family (C = Basic/Standard, P = Premium)')
 param family string = 'C'
 
+@description('Tags applied to the resource')
+param tags object = {}
+
 resource redisCache 'Microsoft.Cache/redis@2024-03-01' = {
   name: name
   location: location
+  tags: tags
   properties: {
     sku: {
       name: sku
@@ -42,5 +46,10 @@ output hostName string = redisCache.properties.hostName
 @description('SSL port of the Redis cache')
 output sslPort int = redisCache.properties.sslPort
 
-@description('Connection string pattern — replace <password> with the primary key from `az redis list-keys`')
-output connectionString string = 'rediss://:PASSWORD_PLACEHOLDER@${redisCache.properties.hostName}:${redisCache.properties.sslPort}/0'
+@description('Primary access key of the Redis cache')
+#disable-next-line outputs-should-not-contain-secrets
+output key string = redisCache.listKeys().primaryKey
+
+@description('Full Redis connection string (rediss://...)')
+#disable-next-line outputs-should-not-contain-secrets
+output connectionString string = 'rediss://:${redisCache.listKeys().primaryKey}@${redisCache.properties.hostName}:${redisCache.properties.sslPort}/0'

@@ -60,6 +60,11 @@ class VersionRegistry:
     @staticmethod
     def build_from_manifest(manifest_path: Path) -> "VersionRegistry":
         if not manifest_path.exists():
+            logger.error(
+                "Manifest not found at %s — version filtering DISABLED; superseded "
+                "document versions will be served. Ensure the manifest ships with the deploy.",
+                manifest_path,
+            )
             return VersionRegistry()
         data = json.loads(manifest_path.read_text())
         entries = data.get("entries", [])
@@ -140,8 +145,8 @@ _registry: VersionRegistry | None = None
 def get_registry() -> VersionRegistry:
     global _registry
     if _registry is None:
-        manifest_path = Path(settings.documents_dir) / "manifest.json"
-        _registry = VersionRegistry.build_from_manifest(manifest_path)
+        from app.paths import manifest_path
+        _registry = VersionRegistry.build_from_manifest(manifest_path())
     return _registry
 
 

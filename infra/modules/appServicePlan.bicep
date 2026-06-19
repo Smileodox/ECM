@@ -7,9 +7,13 @@ param location string
 @description('SKU for the App Service Plan (e.g. B1, B2, S1, P1v3)')
 param sku string = 'B1'
 
+@description('Tags applied to the resource')
+param tags object = {}
+
 resource appServicePlan 'Microsoft.Web/serverfarms@2024-04-01' = {
   name: name
   location: location
+  tags: tags
   kind: 'linux'
   properties: {
     reserved: true // required for Linux

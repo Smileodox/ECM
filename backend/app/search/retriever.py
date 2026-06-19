@@ -48,12 +48,12 @@ def _load_german_program_names() -> set[str]:
     if _GERMAN_PROGRAM_NAMES is not None:
         return _GERMAN_PROGRAM_NAMES
     import json as _json
-    from pathlib import Path
-    manifest_path = Path(settings.documents_dir) / "manifest.json"
+    from app.paths import manifest_path
+    mp = manifest_path()
     names: set[str] = set()
-    if manifest_path.exists():
+    if mp.exists():
         try:
-            data = _json.loads(manifest_path.read_text())
+            data = _json.loads(mp.read_text())
             for entry in data.get("entries", []):
                 for p in entry.get("programs", []):
                     names.add(p.lower())

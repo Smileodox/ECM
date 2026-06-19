@@ -1,11 +1,15 @@
 import logging
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 import pymupdf4llm
 
 logger = logging.getLogger(__name__)
+
+# Per-file parse time above which we flag the doc as a likely OCR/scanned case
+SLOW_PARSE_WARN_SECONDS = 20.0
 
 
 @dataclass
@@ -42,12 +46,38 @@ def parse_pdf(pdf_path: str | Path) -> list[ParsedPage]:
 def parse_all_pdfs(documents_dir: str | Path) -> dict[str, list[ParsedPage]]:
     """Parse all PDFs in a directory. Returns {filename: [ParsedPage, ...]}."""
     docs_path = Path(documents_dir)
+    pdf_files = sorted(docs_path.glob("*.pdf"))
+    total = len(pdf_files)
     results = {}
 
-    for pdf_file in sorted(docs_path.glob("*.pdf")):
+    logger.info("Parsing %d PDFs from %s", total, docs_path)
+    run_start = time.monotonic()
+    slow_docs: list[tuple[str, float]] = []
+
+    for i, pdf_file in enumerate(pdf_files, start=1):
+        t0 = time.monotonic()
         try:
-            results[pdf_file.name] = parse_pdf(pdf_file)
+            pages = parse_pdf(pdf_file)
+            results[pdf_file.name] = pages
+            dt = time.monotonic() - t0
+            if dt >= SLOW_PARSE_WARN_SECONDS:
+                slow_docs.append((pdf_file.name, dt))
+            # Per-doc progress line: index, timing, page count, and a running ETA
+            elapsed = time.monotonic() - run_start
+            eta = (elapsed / i) * (total - i)
+            logger.info(
+                "[%d/%d] %s — %d pages in %.1fs%s | elapsed %.0fs, eta ~%.0fs",
+                i, total, pdf_file.name, len(pages), dt,
+                "  <-- SLOW (likely OCR/scanned)" if dt >= SLOW_PARSE_WARN_SECONDS else "",
+                elapsed, eta,
+            )
         except Exception:
-            logger.warning("Failed to parse %s, skipping", pdf_file.name, exc_info=True)
+            logger.warning("[%d/%d] Failed to parse %s, skipping", i, total, pdf_file.name, exc_info=True)
+
+    total_dt = time.monotonic() - run_start
+    logger.info("Parsed %d/%d PDFs in %.0fs (%d slow docs)", len(results), total, total_dt, len(slow_docs))
+    if slow_docs:
+        slow_docs.sort(key=lambda x: x[1], reverse=True)
+        logger.info("Slowest docs: %s", ", ".join(f"{n} ({d:.0f}s)" for n, d in slow_docs[:10]))
 
     return results

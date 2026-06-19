@@ -25,7 +25,7 @@ from tests.conftest import make_citation
 class TestAdvisoryDisclaimer:
     def test_de_anchors_on_studienberatung(self):
         msg = build_advisory_disclaimer(lang="de")
-        assert "unverbindliche Orientierung" in msg
+        assert "verbindliche Einschätzung" in msg  # calm hand-off, not an alarming caveat
         assert "Zentrale Studienberatung" in msg
         assert "International Office" not in msg  # not added unless requested
 
@@ -36,7 +36,7 @@ class TestAdvisoryDisclaimer:
 
     def test_en_uses_english_contacts(self):
         msg = build_advisory_disclaimer(lang="en", include_international=True)
-        assert "not binding study advice" in msg
+        assert "binding assessment" in msg  # calm hand-off, not an alarming caveat
         assert "International Office" in msg
         assert "/en/" in msg  # International Office url_en is the English page
 
@@ -128,7 +128,7 @@ async def test_advisory_appends_disclaimer_when_model_omits_referral(advisory_ne
 
     tokens = _tokens(await _collect(engine.chat_stream(_DE_ADVISORY, [], request_id="a1")))
 
-    assert "unverbindliche Orientierung" in tokens          # guaranteed disclaimer appended
+    assert "verbindliche Einschätzung" in tokens            # guaranteed hand-off appended
     assert "Zentrale Studienberatung" in tokens             # hand-off present
     assert "International Office" not in tokens              # German query -> no IO
 
@@ -157,7 +157,7 @@ async def test_advisory_english_adds_international_office(advisory_net, monkeypa
 
     tokens = _tokens(await _collect(engine.chat_stream(_EN_ADVISORY, [], request_id="a3")))
 
-    assert "not binding study advice" in tokens
+    assert "binding assessment" in tokens
     assert "International Office" in tokens                   # English query -> international applicant
 
 

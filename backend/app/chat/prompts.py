@@ -80,6 +80,48 @@ def build_low_confidence_notice(
     return notice + "\n\n"
 
 
+def build_contact_lead(
+    query: str = "",
+    route: str = "general",
+    query_type: str = "contact",
+    lang: str = "de",
+    program_name: str | None = None,
+) -> str:
+    """Deterministic contact block prepended to contact-intent answers.
+
+    A "who do I approach for program X?" question must surface the right program-specific
+    Anlaufstelle (Fachstudienberatung / Prüfungsamt) directly, instead of letting web
+    retrieval answer with whatever loosely-matching counseling pages it happened to find.
+    Reuses resolve_escalation_contacts, which injects the faculty-specific URLs when a
+    program is known.
+    """
+    contacts = resolve_escalation_contacts(query, route, query_type, program_name)
+    if not contacts:
+        return ""
+    primary = contacts[0]
+    name_key = "name_en" if lang == "en" else "name_de"
+    url_key = "url_en" if lang == "en" else "url"
+    prog = f" {program_name}" if program_name else ""
+
+    if lang == "en":
+        lead = (
+            f"**Right contact:** For{prog}, the best place to ask is the "
+            f"[{primary[name_key]}]({primary[url_key]})"
+        )
+        if len(contacts) > 1:
+            lead += f" or the [{contacts[1][name_key]}]({contacts[1][url_key]})"
+        lead += "."
+    else:
+        lead = (
+            f"**Richtige Anlaufstelle:** Für{prog} wendest du dich am besten an die "
+            f"[{primary[name_key]}]({primary[url_key]})"
+        )
+        if len(contacts) > 1:
+            lead += f" oder die [{contacts[1][name_key]}]({contacts[1][url_key]})"
+        lead += "."
+    return lead + "\n\n"
+
+
 def build_grounding_retraction(
     query: str = "",
     route: str = "regulation",
@@ -137,21 +179,20 @@ def build_advisory_disclaimer(
             f"Visumsfragen ist außerdem das {io_link} die richtige Anlaufstelle."
         )
 
-    # Kept deliberately neutral so it also fits program *process* answers (where
-    # studienangebot sources are retrieved too): the no-eligibility-claim guardrail lives
-    # in _ADVISORY_LAYER (model-side), this fallback only guarantees a hand-off.
+    # A calm, helpful hand-off — NOT an alarming reliability caveat. The earlier
+    # "⚠️ not binding study advice" framing made users doubt correct answers; the
+    # no-eligibility-claim guardrail lives in _ADVISORY_LAYER (model-side), so this
+    # fallback only needs to guarantee the advising pointer.
     if lang == "en":
         msg = (
-            "\n\n---\n\n⚠️ **This is general orientation, not binding study advice.** "
-            f"For your specific situation, the {sb_link}"
+            f"\n\nℹ️ For a binding assessment of your specific situation, the {sb_link}"
         )
-        msg += f" or the {io_link} can help." if include_international else " can help."
+        msg += f" or the {io_link} is happy to help." if include_international else " is happy to help."
     else:
         msg = (
-            "\n\n---\n\n⚠️ **Das ist eine unverbindliche Orientierung, keine verbindliche "
-            f"Studienberatung.** Für deine konkrete Situation hilft die {sb_link}"
+            f"\n\nℹ️ Für eine verbindliche Einschätzung deiner konkreten Situation hilft dir die {sb_link}"
         )
-        msg += f" oder das {io_link}." if include_international else "."
+        msg += f" oder das {io_link} gerne weiter." if include_international else " gerne weiter."
     return msg
 
 

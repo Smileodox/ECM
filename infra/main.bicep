@@ -11,21 +11,32 @@ param location string = 'westeurope'
 @description('Environment identifier (poc, staging, prod)')
 param environment string = 'poc'
 
-// ─── Secure parameters (passed at deploy time) ─────────────────────────────
+@description('App Service Plan SKU (B1, B2, B3, S1, P1v3, …)')
+param appServicePlanSku string = 'B1'
 
-@secure()
-@description('Azure OpenAI API key — retrieve via `az cognitiveservices account keys list`')
-param azureOpenaiApiKey string
+@description('Azure OpenAI model deployments — overridable per environment (model availability & SKU quota differ per subscription/region)')
+param openaiDeployments array = [
+  { name: 'gpt-5.4',       model: 'gpt-5.4',              version: '2026-03-05', skuName: 'GlobalStandard', capacity: 10 }
+  { name: 'gpt-5.4-nano',  model: 'gpt-5.4-nano',         version: '2026-03-17', skuName: 'GlobalStandard', capacity: 10 }
+  { name: 'gpt-5.1',       model: 'gpt-5.1',              version: '2025-11-13', skuName: 'GlobalStandard', capacity: 10 }
+  { name: 'gpt-5-mini',    model: 'gpt-5-mini',           version: '2025-08-07', skuName: 'GlobalStandard', capacity: 10 }
+  { name: 'gpt-5-nano',    model: 'gpt-5-nano',           version: '2025-08-07', skuName: 'GlobalStandard', capacity: 10 }
+  { name: 'gpt-4.1',       model: 'gpt-4.1',              version: '2025-04-14', skuName: 'GlobalStandard', capacity: 10 }
+  { name: 'gpt-4.1-mini',  model: 'gpt-4.1-mini',         version: '2025-04-14', skuName: 'GlobalStandard', capacity: 10 }
+  { name: 'text-embedding-3-small', model: 'text-embedding-3-small', version: '1', skuName: 'Standard', capacity: 30 }
+]
 
-@secure()
-@description('Azure AI Search admin key — retrieve via `az search admin-key show`')
-param azureSearchKey string
-
-@secure()
-@description('Redis primary key — retrieve via `az redis list-keys`')
-param redisPassword string
+@description('Mandatory SKF governance tags applied to every resource')
+param tags object = {
+  apmid: 'apm0006827'
+  billingidentifier: 'cl_op_azure'
+  fso: 'paul.keck@skf.com'
+  itso: 'paul.keck@skf.com'
+}
 
 // ─── Derived resource names ─────────────────────────────────────────────────
+// Keys are read from the resources this template creates (listKeys), so no
+// secrets need to be supplied at deploy time — the stack is self-contained.
 
 var aspName = 'asp-${projectName}-${environment}'
 var backendAppName = 'app-${projectName}-backend-${environment}'
@@ -33,6 +44,8 @@ var frontendAppName = 'app-${projectName}-frontend-${environment}'
 var openaiName = 'oai-${projectName}-${environment}'
 var searchName = 'search-${projectName}-${environment}'
 var redisName = 'redis-${projectName}-${environment}'
+// Storage account names: lowercase alphanumeric only, max 24 chars
+var storageName = take(toLower(replace('st${projectName}${environment}', '-', '')), 24)
 
 // ─── App Service Plan ───────────────────────────────────────────────────────
 
@@ -41,6 +54,8 @@ module appServicePlan 'modules/appServicePlan.bicep' = {
   params: {
     name: aspName
     location: location
+    sku: appServicePlanSku
+    tags: tags
   }
 }
 
@@ -51,6 +66,8 @@ module openai 'modules/openai.bicep' = {
   params: {
     name: openaiName
     location: location
+    deployments: openaiDeployments
+    tags: tags
   }
 }
 
@@ -61,6 +78,7 @@ module search 'modules/search.bicep' = {
   params: {
     name: searchName
     location: location
+    tags: tags
   }
 }
 
@@ -71,6 +89,18 @@ module redis 'modules/redis.bicep' = {
   params: {
     name: redisName
     location: location
+    tags: tags
+  }
+}
+
+// ─── Azure Storage (user study logging) ─────────────────────────────────────
+
+module storage 'modules/storage.bicep' = {
+  name: 'deploy-storage'
+  params: {
+    name: storageName
+    location: location
+    tags: tags
   }
 }
 
@@ -83,11 +113,13 @@ module backend 'modules/appServiceBackend.bicep' = {
     location: location
     appServicePlanId: appServicePlan.outputs.id
     azureOpenaiEndpoint: openai.outputs.endpoint
-    azureOpenaiApiKey: azureOpenaiApiKey
+    azureOpenaiApiKey: openai.outputs.key
     azureSearchEndpoint: search.outputs.endpoint
-    azureSearchKey: azureSearchKey
-    redisConnectionString: 'rediss://:${redisPassword}@${redis.outputs.hostName}:${redis.outputs.sslPort}/0'
+    azureSearchKey: search.outputs.key
+    redisConnectionString: redis.outputs.connectionString
+    azureStorageConnectionString: storage.outputs.connectionString
     allowedOrigins: 'https://${frontendAppName}.azurewebsites.net'
+    tags: tags
   }
 }
 
@@ -100,6 +132,7 @@ module frontend 'modules/appServiceFrontend.bicep' = {
     location: location
     appServicePlanId: appServicePlan.outputs.id
     apiUrl: 'https://${backend.outputs.defaultHostName}'
+    tags: tags
   }
 }
 

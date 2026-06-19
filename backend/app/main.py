@@ -38,6 +38,24 @@ from app.routers import chat, ingest
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Warm critical singletons at startup so the FIRST user request doesn't pay
+    # client construction + manifest/registry load — the main cause of first-prompt
+    # timeouts (cold worker + lazy init exceeding the request/worker timeout).
+    import logging as _logging
+    try:
+        from app.chat.engine import _get_openai_client, _load_program_names_async
+        from app.search.retriever import _get_search_client
+        from app.search.version_registry import get_registry
+        _get_openai_client()
+        get_registry()
+        await _load_program_names_async()
+        client = _get_search_client()
+        try:
+            await client.get_document_count()  # warm the search HTTP pool (best-effort)
+        except Exception:
+            _logging.getLogger(__name__).warning("Search warm-up ping failed (continuing)", exc_info=True)
+    except Exception:
+        _logging.getLogger(__name__).warning("Startup warm-up failed (continuing)", exc_info=True)
     yield
     from app.search.retriever import close_search_client
     await close_search_client()
@@ -95,7 +113,7 @@ app.include_router(chat.router, prefix="/api")
 app.include_router(ingest.router, prefix="/api")
 
 
-_health_cache: dict = {"status": "ok", "openai_ok": False, "search_ok": False, "checked_at": 0.0}
+_health_cache: dict = {"status": "ok", "openai_ok": False, "search_ok": False, "manifest_loaded": False, "blocked_count": 0, "checked_at": 0.0}
 
 @app.get("/api/health")
 async def health():
@@ -111,6 +129,18 @@ async def health():
             checks["openai_ok"] = True  # if search is up, config is valid
             checks["search_ok"] = True
         except Exception:
+            checks["status"] = "degraded"
+        # Manifest presence drives version filtering + program detection. Surface it
+        # so a silently-missing manifest (e.g. not shipped) is visible, not invisible.
+        try:
+            from app.paths import manifest_path
+            from app.search.version_registry import get_registry
+            checks["manifest_loaded"] = manifest_path().exists()
+            checks["blocked_count"] = len(get_registry().get_blocked_filenames())
+        except Exception:
+            checks["manifest_loaded"] = False
+            checks["blocked_count"] = 0
+        if not checks.get("manifest_loaded"):
             checks["status"] = "degraded"
         _health_cache.update(checks)
         _health_cache["checked_at"] = now

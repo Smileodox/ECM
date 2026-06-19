@@ -51,15 +51,23 @@ param azureSearchWebIndexName string = 'campuslmu-web-v1'
 @description('Redis connection string (rediss://...)')
 param redisConnectionString string = ''
 
+@secure()
+@description('Azure Storage connection string for user study logging (optional)')
+param azureStorageConnectionString string = ''
+
 @description('Allowed CORS origins (comma-separated)')
 param allowedOrigins string = 'http://localhost:3000'
 
 @description('Directory for feedback storage (persistent on App Service)')
 param feedbackDir string = '/home/feedback'
 
+@description('Tags applied to the resource')
+param tags object = {}
+
 resource backendApp 'Microsoft.Web/sites@2024-04-01' = {
   name: name
   location: location
+  tags: tags
   kind: 'app,linux'
   properties: {
     serverFarmId: appServicePlanId
@@ -83,6 +91,7 @@ resource backendApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'AZURE_SEARCH_INDEX_NAME', value: azureSearchIndexName }
         { name: 'AZURE_SEARCH_WEB_INDEX_NAME', value: azureSearchWebIndexName }
         { name: 'REDIS_URL', value: redisConnectionString }
+        { name: 'AZURE_STORAGE_CONNECTION_STRING', value: azureStorageConnectionString }
         { name: 'ALLOWED_ORIGINS', value: allowedOrigins }
         { name: 'FEEDBACK_DIR', value: feedbackDir }
         { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'true' }

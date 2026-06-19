@@ -33,8 +33,9 @@ _QUERY_TYPES = {
         re.IGNORECASE,
     ),
     "contact": re.compile(
-        r"(?:wo (?:finde|ist|kann)|kontakt|ansprechpartner|anlaufstelle|"
-        r"studienberatung|prüfungsamt|studentenkanzlei|where can i|who do i)",
+        r"(?:wo (?:finde|ist|kann)|kontakt|ansprech(?:partner|person|partnerin)|"
+        r"an wen|anlaufstelle|studienberatung|prüfungsamt|studentenkanzlei|"
+        r"where can i|who do i|who can i|whom|contact person)",
         re.IGNORECASE,
     ),
     "process": re.compile(

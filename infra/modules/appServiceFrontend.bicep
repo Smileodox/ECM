@@ -13,9 +13,13 @@ param linuxFxVersion string = 'NODE|22-lts'
 @description('Backend API URL (e.g. https://app-chatbot-backend.azurewebsites.net)')
 param apiUrl string
 
+@description('Tags applied to the resource')
+param tags object = {}
+
 resource frontendApp 'Microsoft.Web/sites@2024-04-01' = {
   name: name
   location: location
+  tags: tags
   kind: 'app,linux'
   properties: {
     serverFarmId: appServicePlanId
@@ -25,9 +29,16 @@ resource frontendApp 'Microsoft.Web/sites@2024-04-01' = {
       alwaysOn: true
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
+      // Next.js runs as a PREBUILT standalone bundle: the deploy ships a
+      // compiled `.next/standalone` payload, Azure must NOT run a build.
+      // Startup runs the bundled server directly.
+      appCommandLine: 'node server.js'
       appSettings: [
+        // NEXT_PUBLIC_* vars are inlined at build time, so the backend URL
+        // must be baked in before `npm run build` (deploy script does this).
+        // Kept here for reference/visibility.
         { name: 'NEXT_PUBLIC_API_URL', value: apiUrl }
-        { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'true' }
+        { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'false' }
       ]
     }
   }

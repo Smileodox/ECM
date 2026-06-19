@@ -13,9 +13,13 @@ param replicaCount int = 1
 @description('Number of partitions (increase for more index storage)')
 param partitionCount int = 1
 
+@description('Tags applied to the resource')
+param tags object = {}
+
 resource searchService 'Microsoft.Search/searchServices@2024-06-01-preview' = {
   name: name
   location: location
+  tags: tags
   sku: {
     name: sku
   }
@@ -36,3 +40,7 @@ output name string = searchService.name
 
 @description('Endpoint URL of the Azure AI Search service')
 output endpoint string = 'https://${name}.search.windows.net'
+
+@description('Primary admin key of the Azure AI Search service')
+#disable-next-line outputs-should-not-contain-secrets
+output key string = searchService.listAdminKeys().primaryKey

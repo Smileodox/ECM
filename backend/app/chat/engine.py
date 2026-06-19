@@ -22,6 +22,7 @@ from app.chat.few_shot import classify_query
 from app.chat.grounding import verify_grounding
 from app.chat.prompts import (
     build_advisory_disclaimer,
+    build_contact_lead,
     build_context,
     build_grounding_retraction,
     build_low_confidence_notice,
@@ -72,15 +73,16 @@ def _load_program_names() -> list[str]:
     if _PROGRAM_NAMES is not None:
         return _PROGRAM_NAMES
     import json as _json
-    from pathlib import Path
-    manifest_path = Path(settings.documents_dir) / "manifest.json"
-    if manifest_path.exists():
-        data = _json.loads(manifest_path.read_text())
+    from app.paths import manifest_path
+    mp = manifest_path()
+    if mp.exists():
+        data = _json.loads(mp.read_text())
         names = set()
         for entry in data.get("entries", []):
             names.update(entry.get("programs", []))
         _PROGRAM_NAMES = sorted(names, key=len, reverse=True)
     else:
+        logger.error("Manifest not found at %s — program detection disabled", mp)
         _PROGRAM_NAMES = []
     return _PROGRAM_NAMES
 
@@ -510,7 +512,6 @@ async def chat_stream(
     # 1. Domain check + query rewrite + route classification in parallel
     #    Skip domain check on follow-ups — user already established context.
     t0 = time.perf_counter()
-    program_was_provided = program_name is not None
     need_domain = not history
     need_rewrite = bool(history)
 
@@ -544,12 +545,23 @@ async def chat_stream(
     lang = detect_response_language(message, history)
     yield _sse("language", {"lang": lang})
 
-    # Program detection: only for REGULATION and BOTH routes
-    need_program = not program_name  # detect for all routes — used in escalation contact URLs
-    if need_program:
+    # Program detection. A program named explicitly in the CURRENT message always wins, so a
+    # user can switch programs by typing (e.g. "I study BWL") even when a previous selection is
+    # still attached to the request. Otherwise keep the provided program, and only fall back to
+    # history/LLM resolution when nothing was provided.
+    if _wants_context_reset(message):
+        program_name = None  # user explicitly asked to switch/clear the program
+        explicit_program = None
+    else:
+        explicit_program = _detect_program(message)
+    if explicit_program:
+        if explicit_program != program_name:
+            program_name = explicit_program
+            yield _sse("detected_program", {"program_name": program_name})
+    elif not program_name:
         program_name = await _detect_program_from_context(message, history)
-    if program_name and not program_was_provided:
-        yield _sse("detected_program", {"program_name": program_name})
+        if program_name:
+            yield _sse("detected_program", {"program_name": program_name})
 
     # 2b. Infer doc_type from query classification (regulation queries only)
     _QUERY_TYPE_TO_DOC_TYPE = {"eligibility": "eignung", "amendment": "aenderung"}
@@ -565,7 +577,9 @@ async def chat_stream(
             search_query, doc_type=doc_type, program_name=program_name, query_type=query_type,
         )
         if not result.citations and (doc_type or program_name):
-            result = await retrieve_combined(search_query, query_type=query_type)
+            # Drop only the doc_type filter on retry — keep program_name so the answer stays
+            # pinned to the detected program (mirrors the REGULATION path below).
+            result = await retrieve_combined(search_query, program_name=program_name, query_type=query_type)
             result.low_confidence = True
             if result.confidence == "solid":
                 result.confidence = "uncertain"  # precise-filter intent failed → less sure
@@ -673,14 +687,26 @@ async def chat_stream(
     resolved_model = resolve_model(model_name)
     full_response = ""
 
-    # 6b. UNCERTAIN band: lead with a visible uncertainty notice. Part of full_response
+    # 6b. Contact-intent: lead with the right program-specific Anlaufstelle deterministically,
+    #     so "who do I contact for program X?" surfaces the Fachstudienberatung / Prüfungsamt
+    #     instead of whatever loosely-matching web pages retrieval returned.
+    if query_type == "contact" and program_name:
+        lead = build_contact_lead(
+            query=search_query, route=route.value, query_type=query_type,
+            lang=lang, program_name=program_name,
+        )
+        if lead:
+            full_response += lead
+            yield _sse("token", {"content": lead})
+
+    # 6c. UNCERTAIN band: lead with a visible uncertainty notice. Part of full_response
     #     so it survives client-side normalization (no [Quelle N] markers inside it).
     if confidence == "uncertain":
         notice = build_low_confidence_notice(
             query=search_query, route=route.value, query_type=query_type,
             lang=lang, program_name=program_name,
         )
-        full_response = notice
+        full_response += notice
         yield _sse("token", {"content": notice})
 
     # 7. Stream from LLM provider
@@ -724,7 +750,12 @@ async def chat_stream(
     #     the grounding verifier — guarantee a not-binding disclaimer + hand-off to advising,
     #     unless the model already linked Studienberatung / International Office itself.
     advisory_disclaimer_added = False
-    if "studienangebot" in content_types:
+    # Only on genuinely advisory answers — i.e. the TOP-ranked source is a program-
+    # selection (studienangebot) hit — not when a stray studienangebot chunk merely
+    # tags along a factual/process answer. Stops the hand-off block from reading as a
+    # blanket reliability caveat on nearly every answer (supervisor feedback).
+    advisory_answer = bool(citations) and citations[0].doc_type == "studienangebot"
+    if advisory_answer:
         sb_url = ESCALATION_CONTACTS["studienberatung"]["url"]
         io_urls = (ESCALATION_CONTACTS["international"]["url"], ESCALATION_CONTACTS["international"]["url_en"])
         has_referral = sb_url in full_response or any(u in full_response for u in io_urls)

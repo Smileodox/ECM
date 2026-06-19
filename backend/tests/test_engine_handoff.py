@@ -110,3 +110,24 @@ async def test_grounding_retraction_on_invented_section(no_network, monkeypatch)
     assert "Bitte prüfen" in tokens                    # retraction appended
     metrics = _data(events, "metrics")[0]
     assert metrics["verification"] == "ungrounded"     # §99 is in no cited source
+
+
+@pytest.mark.asyncio
+async def test_contact_intent_leads_with_program_contact(monkeypatch):
+    """A 'who do I contact for program X?' question must lead with the program-specific
+    Fachstudienberatung, not whatever loosely-matching web pages retrieval returned."""
+    monkeypatch.setattr(engine, "_is_in_domain", AsyncMock(return_value=True))
+    monkeypatch.setattr(engine, "classify_route", AsyncMock(return_value=QueryRoute.GENERAL))
+    monkeypatch.setattr("app.chat.providers.resolve_model", lambda m: "gpt-5.4")
+    monkeypatch.setattr("app.chat.providers.stream_chat", _good_stream)
+    cit = make_citation(index=1, doc_type="web_1x1", content="Allgemeine Beratungsangebote ...")
+    monkeypatch.setattr(engine, "retrieve_web", AsyncMock(return_value=_result([cit], "solid", 2.5)))
+
+    events = await _collect(engine.chat_stream(
+        "Wer ist die Ansprechperson für mein Studium?", [],
+        program_name="Betriebswirtschaftslehre", request_id="tc",
+    ))
+    tokens = _tokens(events)
+
+    assert "Richtige Anlaufstelle" in tokens                       # deterministic contact lead
+    assert "som.lmu.de" in tokens                                  # program-specific Fachstudienberatung URL
