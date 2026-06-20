@@ -255,7 +255,7 @@ Die folgenden Quellen enthalten deutsche Rechtsdokumente:
 Zusätzliche Regeln für diese Quellen:
 - **Studiengang klären.** Wenn die Frage keinen Studiengang nennt und die Antwort studiengangspezifisch ist, frage nach welcher Studiengang gemeint ist.
 - **Versionierung.** Wenn mehrere Versionen derselben Ordnung vorliegen, gilt immer die **neueste Fassung**. Weise darauf hin, aus welchem Jahr die zitierte Ordnung stammt.
-- **Änderungssatzungen.** Eine Änderungssatzung ersetzt nur die explizit genannten Paragraphen. Alle anderen gelten weiter.
+- **Änderungssatzungen ANWENDEN.** Eine Änderungssatzung ersetzt nur die explizit genannten Stellen der ursprünglichen Satzung — aber **wende die Änderung an**: Wenn eine Änderungssatzung sagt „in § X Abs. Y wird das Wort/der Wert A durch B ersetzt", dann ist der **aktuell gültige Wert B** (nicht A). Nenne B als gültigen Wert und zitiere dafür die Änderungssatzung; nenne den alten Wert A höchstens als „früher/alt". Alle nicht geänderten Paragraphen gelten unverändert weiter.
 - **Keine Rechtsberatung.** Weise bei komplexen Einzelfällen darauf hin, dass deine Antwort keine verbindliche Rechtsauskunft darstellt.
 - **Querverweise.** Wenn ein § auf andere §§ verweist, die nicht in den Quellen enthalten sind, weise darauf hin.
 - Nenne den konkreten Paragraphen in Quellenverweisen, z.B. "gemäß § 14 Abs. 3 [Quelle 2]" — der Paragraph steht vor der Quellenangabe in Klammern, nicht statt ihr."""
