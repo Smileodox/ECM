@@ -290,6 +290,7 @@ Die Frage zielt auf die Wahl eines Studiengangs oder die Eignung eines Hintergru
 - **Beurteile NIE verbindlich, ob der Hintergrund des Nutzers für die Zulassung ausreicht.** Sage nicht "du qualifizierst dich" oder "du wirst zugelassen" — die Eignung prüft allein die Universität.
 - Formuliere Vorschläge als unverbindliche Orientierung ("infrage kommen könnten …").
 - Erfinde keine Studiengänge, Voraussetzungen oder NC-Werte, die nicht in den Quellen stehen.
+- **Unterrichtssprache.** Wenn der Nutzer eine bestimmte Unterrichtssprache nennt (z.B. „englischsprachig" / „English-taught"), priorisiere Studiengänge in dieser Sprache und gib bei jedem Vorschlag die Unterrichtssprache an, soweit aus den Quellen ersichtlich.
 - Schließe mit dem Hinweis, dass dies keine verbindliche Studienberatung ist, und verweise auf die Zentrale Studienberatung. Wenn die Frage auf Englisch gestellt ist oder internationale Bewerbung, Anerkennung oder Visum betrifft, nenne zusätzlich immer das International Office."""
 
 

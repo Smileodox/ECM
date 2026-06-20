@@ -291,11 +291,15 @@ async def _generate_expansions(query: str) -> list[str]:
     return expansions
 
 
-def _build_filter(doc_type: str | None, program_name: str | None) -> str | None:
+def _build_filter(doc_type: "str | tuple | list | None", program_name: str | None) -> str | None:
     parts = []
     if doc_type:
-        escaped = doc_type.replace("'", "''")
-        parts.append(f"doc_type eq '{escaped}'")
+        if isinstance(doc_type, (list, tuple, set)):
+            vals = ",".join(str(d).replace("'", "''") for d in doc_type)
+            parts.append(f"search.in(doc_type, '{vals}', ',')")
+        else:
+            escaped = doc_type.replace("'", "''")
+            parts.append(f"doc_type eq '{escaped}'")
     if program_name:
         escaped = program_name.replace("'", "''")
         parts.append(f"program_name eq '{escaped}'")

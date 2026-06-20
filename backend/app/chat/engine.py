@@ -456,7 +456,25 @@ async def _rewrite_query(message: str, history: list[ChatMessage]) -> str:
         response = await client.chat.completions.create(
             model=settings.azure_openai_mini_deployment,
             messages=[
-                {"role": "system", "content": "Rewrite the user's follow-up question as a standalone question that includes all necessary context from the conversation history. Only output the rewritten question, nothing else. If the question is already standalone, return it unchanged. Keep the same language as the original question. Preserve all legal references exactly as written (e.g., §14 Abs. 3, Ziff. 2, Nr. 1). Preserve program names (Studiengangbezeichnungen) exactly. IMPORTANT: Preserve the user's actual intent — if they ask about something NEW (e.g. curriculum, modules, grading) that differs from the previous topic (e.g. admission), do NOT fold the new question back into the old topic. Only add context like the program name, not the previous topic."},
+                {"role": "system", "content": (
+                    "Rewrite the user's follow-up as a STANDALONE question for document retrieval. "
+                    "Output ONLY the rewritten question, nothing else; keep the same language. Rules:\n"
+                    "1. Resolve references ('it', 'this program', 'that') to the concrete program/topic from the conversation.\n"
+                    "2. If the follow-up concerns a program already discussed, add that program name.\n"
+                    "3. CRITICAL — preserve the NEW intent: if the follow-up asks about a DIFFERENT aspect than the "
+                    "previous turn, rewrite ONLY the new aspect (plus the program name). NEVER carry over the previous "
+                    "turn's aspect — e.g. do not turn 'What are the admission requirements?' into a question about "
+                    "deadlines or where to apply just because the previous turn was about those.\n"
+                    "4. Preserve legal references (§14 Abs. 3, Ziff. 2) and program names exactly. If already standalone, return unchanged.\n\n"
+                    "Examples:\n"
+                    "Conversation:\nuser: Tell me about the MMT master.\nFollow-up: Can you tell me more about this program?\n"
+                    "→ Tell me more about the Management and Digital Technologies (MMT) master.\n\n"
+                    "Conversation:\nuser: Where do I apply for the BWL master as an international applicant?\n"
+                    "assistant: ... aptitude assessment by 15 May, International Office ...\nFollow-up: What are the admission requirements?\n"
+                    "→ What are the admission requirements for the BWL (Betriebswirtschaftslehre) master?\n\n"
+                    "Conversation:\nuser: Who can I contact about my BWL application?\nFollow-up: Is everything still in time, or do I need to do something?\n"
+                    "→ For the BWL master application, is everything still within the deadlines or do I need to take any action?"
+                )},
                 {"role": "user", "content": f"Conversation:\n{history_text}\n\nFollow-up: {message}"},
             ],
             temperature=0,
@@ -564,7 +582,10 @@ async def chat_stream(
             yield _sse("detected_program", {"program_name": program_name})
 
     # 2b. Infer doc_type from query classification (regulation queries only)
-    _QUERY_TYPE_TO_DOC_TYPE = {"eligibility": "eignung", "amendment": "aenderung"}
+    # Eligibility must ALSO pull Änderungssatzungen — an amendment to the Eignungssatzung
+    # (e.g. the one moving the BWL deadline Juni->Mai) is doc_type="aenderung" and would
+    # otherwise be filtered out, leaving only the stale base text.
+    _QUERY_TYPE_TO_DOC_TYPE = {"eligibility": ("eignung", "aenderung"), "amendment": "aenderung"}
     query_type = classify_query(search_query)
     doc_type = _QUERY_TYPE_TO_DOC_TYPE.get(query_type) if route != QueryRoute.GENERAL else None
 
