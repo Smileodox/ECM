@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "campusLMU Study Assistant",
+  title: "Study Assistant",
   description: "AI chatbot for questions about study and exam regulations at LMU Munich",
 };
 

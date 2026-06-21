@@ -71,7 +71,7 @@ export function ChatWindow({ subjectId }: { subjectId?: string | null }) {
           </div>
           <div className="hidden sm:block">
             <h1 className="text-sm font-semibold text-text-primary tracking-tight">
-              campusLMU Study Assistant
+              Study Assistant
             </h1>
             <span className="text-xs text-text-muted">AI Study Advisor</span>
           </div>
